@@ -98,6 +98,7 @@ shinyServer(function(input, output) {
     
     output$plot <- renderPlot({
         plot.df <- datasetInput()
+        dblts <- list(c(1, "hour"), c(1, "day"), c(1, "month"), c(1, "year"), c(10, "years"), c(100, "years"))
         p <- ggplot(plot.df,
                aes(x = dblt, y = labeling_time, fill = Label, colour = Label)) + 
             geom_segment(aes(x=0, xend=dblt, y=labeling_time, yend=labeling_time), 
