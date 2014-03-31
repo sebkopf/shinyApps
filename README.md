@@ -18,7 +18,7 @@ install.packages(packages, depen=T)
 ```
 
 #### Run locally from GitHub
-Now you can just run the app either directly from GitHub (most convenient):
+Now you can just run the app either directly from GitHub (most convenient and always up to date):
 ```coffee
 library(shiny)
 runGitHub("shinyApps", "sebkopf", subdir = "isolabel")
