@@ -1,7 +1,7 @@
 shinyApps
 =========
 
-collection of shiny apps
+This repository is intended to hold the source code for all of my shiny apps (I'll put them online as I find the time to make them useful enough to share). For starters I put up my [isolabel](#isolabel) app and hope people find it useful. As always, please use the GitHub [issue tracker](https://github.com/sebkopf/shinyApps/issues) for any feedback, suggestions, bug reports, feature requests, etc.
 
 ## isolabel
 
