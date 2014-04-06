@@ -13,8 +13,9 @@ An online version is available [here](https://sebkopf.shinyapps.io/isolabel/) an
 ### Run locally
 To run the shiny app locally you need to install the following packages:
 ```coffee
-packages <- c("shiny", "ggplot2", "lubridate", "stringr")
+packages <- c("shiny", "ggplot2", "lubridate", "stringr", "devtools")
 install.packages(packages, depen=T)
+devtools::install_github("shiny-incubator", "rstudio")
 ```
 
 #### Run locally from GitHub
