@@ -1,4 +1,4 @@
-
+library(shiny)
 run_app <- function(name) {
     library(shiny)
     runApp(name)
