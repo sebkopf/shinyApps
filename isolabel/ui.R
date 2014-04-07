@@ -100,7 +100,7 @@ shinyUI(
                                    `Total abundance [% light isotope]` = "frac"), selected="permil"),
                              tableOutput("table"),
                              downloadButton('downloadTable', 'Download Table')),
-                    selected = "Table")
+                    selected = "Plot")
             ), 
             
             position = "left"
