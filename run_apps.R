@@ -5,3 +5,4 @@ run_app <- function(name) {
 }
 
 isolabel <- function() run_app("isolabel")
+dynamic <- function() run_app("dynamic")

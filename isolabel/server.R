@@ -1,7 +1,7 @@
 library(shiny)
+library(isotopia)
 library(lubridate)
 library(stringr)
-library(datasets)
 library(ggplot2)
 library(grid)
 library(plyr)
@@ -24,7 +24,14 @@ iso.AtoEx<-function(alphas) (alphas-1)*1000 #alpha to epsilon (as permill, i.e. 
 iso.ExtoA<-function(eps) eps/1000 + 1 #epsilon in permil to alpha
 iso.DxtoEx<-function(deltas1, deltas2) iso.AtoEx(iso.DxtoA(deltas1, deltas2)) # from delta notation (in permil, i.e. 1000x) to epsilon in permil
 
-#' Constants used for isotopic reference values
+#' Register isotope reference materials 
+use_permil(TRUE)
+register_standard(ratio(`2H` = 0.00015575, major = "1H", compound = "VSMOW"))
+register_standard(ratio(`13C` = 0.011237, major = "12C", compound = "VPDB"))
+register_standard(ratio(`15N` = 0.003677, major = "14N", compound = "Air"))
+register_standard(ratio(`18O` = 0.0020052, major = "16O", compound = "VSMOW"))
+register_standard(ratio(`34S` = 0.0045005, major = "32S", compound = "CDT"))
+
 c.R_nat <<- mutate(data.frame(
     minor = c("2H", "13C", "15N", "18O", "34S"),
     major = c("1H", "12C", "14N", "16O", "32S"),
@@ -44,39 +51,52 @@ duration_label <- function(ds) {
 }
 
 #' Labeling time as function of doubling time, desired isotopic enrichment and strength of label
-#' @param dblt doubling times, a vector of lubridate:::duration objects
-#' @param Ex_sample sample enrichment (in permil)
-#' @param F_label labeling strength (in fractional abundance)
-#' @param R_nat natural abundance of the labeled material (isotope ratio)
-#' @return data frame with input columns and additional columns label.time, alpha and s
-label_time <- function(dblt, Ex_sample, F_label, R_nat) {
-    df <- expand.grid(dblt = dblt, Ex_sample = Ex_sample, F_label = F_label, R_nat = R_nat, stringsAsFactors = FALSE)
-    mutate(df, 
+#' 
+#' Formula: label_time = dblt / log(2) * log [(F_spike - F_natural) / (F_spike - F_target)]
+#' 
+#' @param dblt doubling times - a vector of lubridate:::duration objects
+#' @param target enrichment - an isotope value object (usually abundance or delta value) 
+#' @param spike - strength of label, another isotope value object (usually abundance but delta value works too)
+#' @param natural - natural abundance (ratio or abundance)
+#' @return data frame with input columns and additional columns target.ab, spike.ab (the abundance objects) and labeling_time
+#' @note the conversion to an abundance value if coming from delta target or spike requires
+#' the delta values to have their ref_ratio set (or the standard registered) and is only 100%
+#' accurate in 2 isotope systems (othewise some error introduced when converting ratio to abundance
+#' without taking the other minor isotopes into consideration)
+label_time <- function(dblt, target, spike, natural) {
+    df <- expand.grid(dblt = dblt, target = target, spike = spike, natural = natural, stringsAsFactors = FALSE)
+    df <- mutate(df, 
            dblt.label = duration_label(dblt), # add labels
-           alpha = iso.ExtoA(Ex_sample), # convert epsilon to alpha
-           s = F_label / iso.RtoF(R_nat), # convert label to s (labeling strenth relative to natural abundance)
-           labeling_time = as.numeric(dblt) * 1/log(2) * log((1 - s) / (alpha - s)), # calculate label time
+           target.ab = as.abundance(target), # convert to abundance 
+           spike.ab = as.abundance(spike), # convert to abundance
+           natural.ab = as.abundance(natural), # convert to abundance
+           labeling_time = as.numeric(dblt)/log(2) * 
+               log((as.value(spike.ab) - as.value(natural.ab)) / (as.value(spike.ab) - as.value(target.ab))), # calculate label time
            labeling_time.label = duration_label(labeling_time)) # label
+    df
 }
 
 #' Isotopic enrichment as a function of labeling time, doubling time and strength of label
+#' 
+#' Formula: total = F_natural * exp(-p t) + F_spike * (1 - exp(-p t))
+#' 
 #' @param time labeling times, a vector of lubridate:::duration objects
 #' @param dblt doubling times, a vector of lubridate:::duration objects
-#' @param F_label labeling strength (in fractional abundance)
-#' @param R_nat natural abundance of the labeled material (isotope ratio)
-label_strength <- function(time, dblt, F_label, R_nat) {
-    df <- expand.grid(time = time, dblt = dblt, F_label = F_label, R_nat = R_nat, stringsAsFactors = FALSE)
+#' @param spike - strength of label, isotope value object (usually abundance but delta value works too)
+#' @param natural - natural abundance (ratio or abundance)
+label_strength <- function(time, dblt, spike, natural) {
+    df <- expand.grid(time = time, dblt = dblt, spike.ab = as.abundance(spike), natural.ab = as.abundance(natural), stringsAsFactors = FALSE)
     mutate(df,
            time.label = duration_label(time), # add labels
            dblt.label = duration_label(dblt), # add labels
            p = log(2)/as.numeric(dblt), # specific growth rate
-           nat.abundance = iso.RtoF(R_nat), # natural abundance
-           enrich.abundance = F_label - (F_label - nat.abundance) * exp(-p * as.numeric(time)), # predicted isotopic composition
-           enrich.permil = iso.FtoDx(enrich.abundance, R_nat) # enrichment in permil
+           decay = exp(-p * as.numeric(time)), # decay of old material
+           total.ab = weight(natural.ab, decay) + weight(spike.ab, 1 - decay), # mass balance
+           total.delta = as.delta(as.ratio(total.ab), ref_ratio = as.ratio(natural)) # permil value
            )
 }
 
-# Define server logic required to generate and plot a random distribution
+
 shinyServer(function(input, output, session) {
     
     # Inputs processing ------------------------------------------------
@@ -86,6 +106,7 @@ shinyServer(function(input, output, session) {
         # find doubling times to plot
         dblts <- c()
         dblts.labels <- c()
+        
         for (i in 1:5) { 
             if (paste0("dblt", i) %in% names(input)) {
                 value <- input[[paste0("dblt", i)]]
@@ -106,19 +127,31 @@ shinyServer(function(input, output, session) {
         data <- list()
         
         # natural abundance reference 
-        data$nat <- subset(c.R_nat, minor == input$ref)
+        data$nat <- get_standards(minor = input$ref)[[1]]
         
         # target enrichment
         if (input$targetType == 'permil')
-            data$enrichPermil <- input$intensity_permil
+            data$target <- delta(input$intensity_permil, ref_ratio = data$nat)
         else 
-            data$enrichPermil <- iso.FtoDx(input$intensity_F, data$nat$ratio)
-        data$enrichF <- iso.DxtoF(data$enrichPermil, data$nat$ratio)
+            data$target <- abundance(input$intensity_F)
         
-        # labels
-        data$labels <- sapply(1:3, function(i) input[[paste0("label", i)]], simplify = T)
-        data$labels.show <- 1:3 %in% as.integer(input$show)
-        data$labels.error <- (data$labels <= data$enrichF)
+        data$target <- isotopia:::update_iso(data$target, list(isoname = data$nat@isoname, major = data$nat@major)) # set minor isotope name
+        data$target.ab <- as.abundance(as.ratio(data$target)) # abundance value
+        data$target.delta <- as.delta(as.ratio(data$target), ref_ratio = data$nat) # delta value
+        
+        # weighted natural abundance
+        wnat <- abundance(rep(as.value(data$nat), 3), weight = input$label.ref_vol * input$label.ref_conc)
+        
+        # weighted spikes
+        data$strengths <- sapply(1:3, function(i) input[[paste0("label", i)]], simplify = T)
+        data$vols <- sapply(1:3, function(i) input[[paste0("label", i, "_vol")]], simplify = T)
+        data$concs <- sapply(1:3, function(i) input[[paste0("label", i, "_conc")]], simplify = T)
+        wspikes <- abundance(data$strengths, weight = data$vols * data$concs)
+        
+        # spike sum
+        data$spikes <- isotopia:::update_iso(abundance(as.value(wnat + wspikes)), list(isoname = data$nat@isoname, major = data$nat@major))
+        data$spikes.show <- 1:3 %in% as.integer(input$show)
+        data$spikes.error <- (data$spikes <= data$target.ab)
         
         return(data)
     })
@@ -129,48 +162,71 @@ shinyServer(function(input, output, session) {
         data <- labelsInput()
         
         # labels
-        show <- (which(data$labels.show & !data$labels.error))
+        show <- (which(data$spikes.show & !data$spikes.error))
         
         # errors
         if (length(show) == 0)
             stop("Please enable at least one valid labeling strength.")
-        if (data$enrichF <= data$nat$abundance)
+        if (data$target.ab <= as.abundance(data$nat))
             stop("Please choose a higher target enrichment.")
+        
+        # spikes data frame
+        spikes.df <- mutate(data.frame(data[c("spikes", "vols", "concs", "strengths")]),
+                         Label = paste0("Vol: ", vols, ", Conc: ", concs, ", Strength: ", 100*strengths, "%"))
         
         # labeling times for plot
         plot.df <- label_time(
             dblt = dblts$dblts, 
-            Ex_sample = round(data$enrichPermil), 
-            F_label = data$labels[show], 
-            R_nat = data$nat$ratio)
-        plot.df$Label <- factor(paste0(100*plot.df$F_label, "%")) # legend in %
+            target = data$target.ab, 
+            spike = data$spikes[show],
+            natural = data$nat)
+        plot.df <- merge(plot.df, spikes.df, by.x = "spike", by.y = "spikes")
+        plot.df$Label <- factor(plot.df$Label, levels = spikes.df$Label) # legend
+        
+        # data table for enrichment curves
+        plot2.df <- label_strength(
+            time = duration(c(1, seq(0, max(plot.df$labeling_time) * input$plot2Xzoom, length.out = 50)), "seconds"), 
+            dblt = dblts$dblts, 
+            spike = data$spikes[show],
+            natural = data$nat)
+        # merge with user defined dblts and define factors and reporting format depending on request
+        plot2.df <- merge(plot2.df, data.frame(dblt = dblts$dblts, dblt.userlabel = dblts$dblts.labels), by = 'dblt')
+        plot2.df <- merge(plot2.df, spikes.df, by.x = "spike.ab", by.y = "spikes")
+        plot2.df <- mutate(plot2.df,
+            DBLT = factor(dblt.userlabel, levels = dblts$dblts.labels),
+            Spike = factor(Label, levels = spikes.df$Label),
+            enrichment = as.value(if(input$plot2DataType == "permil") total.delta else total.ab))
+        
+        
         
         # enrichment for table
         table.df <- data.frame()
-        for (label in data$labels[show]) {
-            df <- subset(plot.df, F_label == label)
-            table.df <- rbind(table.df, label_strength(
+        for (i in 1:length(data$spikes[show])) {
+            ispike <- data$spikes[show][i]
+            df <- subset(plot.df, spike.ab == ispike)
+            table.df <- rbind(table.df, 
+              label_strength(
                 time = duration(df$labeling_time, "seconds"), 
                 dblt = duration(df$dblt, "seconds"), 
-                F_label = unique(df$F_label),
-                R_nat = unique(df$R_nat))
+                spike = as.abundance(ispike),
+                natural = data$nat)
             )
         }
         
-        # merge with labels
+        # merge with labels and spikes
         table.df <- merge(table.df, data.frame(dblt = dblts$dblts, dblt.userlabel = paste0(dblts$dblts.labels, " doubling")), by = 'dblt')
+        table.df <- merge(table.df, spikes.df[c("spikes", "Label")], by.x = "spike.ab", by.y = "spikes")
         
         # adjust headers
         table.df <- mutate(
             table.df, 
-            `Label` = paste0(100*F_label, "%"),
             `Incubation time [s]` = as.numeric(time), 
             `Incubation time` = time.label)
         
         if (input$tableDataType == "permil") {
-            table.df$enrichment <- paste0(signif(table.df$enrich.permil, 2))
+            table.df$enrichment <- signif(as.value(table.df$total.delta), 2) 
         } else {
-            table.df$enrichment <- paste0(signif(100*table.df$enrich.abundance, 2))
+            table.df$enrichment <- paste0(signif(100*as.value(table.df$total.ab), 2)) 
         }
         
         # cast 
@@ -179,10 +235,10 @@ shinyServer(function(input, output, session) {
         table.df <- table.df[c(1,3,header_order)]
         
         return(c(
-            dblts, data, list(plot.df = plot.df, table.df = table.df)))
+            dblts, data, list(plot.df = plot.df, plot2.df = plot2.df, table.df = table.df)))
     })
     
-    # plot
+    # plot1
     plotInput <- reactive({
         data <- datasetInput()
         ggplot(data$plot.df,
@@ -199,40 +255,79 @@ shinyServer(function(input, output, session) {
                 labels = unique(data$plot.df$labeling_time.label)) + 
             scale_x_log10(expand = c(0, 0.2), breaks = data$dblts, 
                           labels = data$dblts.labels) + 
-            labs(title = paste0("Required labeling times for ", round(data$enrichPermil), 
-                                " permil enrichment (", signif(data$enrichF * 100, 3),
-                                "% ", input$ref, ")\n"), x = "Doubling time", y = "") + 
+            labs(title = paste0("Required labeling times for enrichment to:\n", 
+                               label(data$target.ab), " = ", signif(as.value(data$target.ab)*100, 3), "% / ",
+                               name(data$target.delta), " = ", round(as.value(data$target.delta)), isotopia:::unit(data$target.delta))) + 
             theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
             theme(legend.position = "right")
     })
+    
+    # plot
+    plot2Input <- reactive({
+        data <- datasetInput()
+        if (input$plot2DataType == "permil") {
+            ylab <- name(data$plot2.df$total.delta)
+            ylabeller <- function(x) format(x, big.mark = ",", scientific = FALSE)
+        } else {
+            ylab <- name(data$plot2.df$total.ab)
+            ylabeller <- function(x)  paste0(signif(100*x, 1), "%")
+        }
+        
+        p <- ggplot(data$plot2.df,
+               aes(x = time, y = enrichment, colour = DBLT)) + 
+            geom_line(linetype=1) + 
+            scale_x_continuous(breaks = function(limits) pretty(limits, 10), labels = duration_label) +
+            labs(x = "", colour = "Doubling time", y = ylab) + 
+            facet_grid(~Spike) + 
+            theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+            theme(legend.position = "right", axis.text.x = element_text(angle = 60, hjust = 1))
+        if (input$plot2Y == TRUE)
+            p + scale_y_log10(label = ylabeller)
+        else 
+            p + scale_y_continuous(label = ylabeller)
+    })
+    
     
     
     # Outputs rendering ---------------------------------------------
     
     # natural abundance info output
-    output$nat <- renderUI({ 
-        nat <- subset(c.R_nat, minor == input$ref)
-        paste0("Reference ", nat$label, " ratio: ", nat$ratio, " (", nat$ref, ")")
+    output$nat <- renderUI({
+        ref <- get_standards(minor = input$ref)[[1]]
+        paste0("Reference ", label(ref), ": ", as.numeric(ref))
     })
     
     # labeling strengths messages output
-    generate_label_msg <- function(i) {
+    generate_label_error <- function(i) {
         renderUI({
             data <- labelsInput()
-            if (data$labels.error[i]) {
-                return (paste0("Too small, can't possibly reach target enrichment (", signif(data$enrichF * 100, 3), "%)."))
+            if (data$spikes.error[i]) {
+                return (paste0("Too small, can't possibly reach target enrichment."))
             } else
                 return ("")
         })
     }
-    output$label1_message <- generate_label_msg(1)
-    output$label2_message <- generate_label_msg(2)
-    output$label3_message <- generate_label_msg(3)   
+    generate_label_msg <- function(i) {
+        renderUI({
+            data <- labelsInput()
+            if (data$spikes.error[i]) {
+                return("")
+            } else
+                return (paste0("Effective labeling strength: ", signif(as.numeric(data$spikes[i]) * 100, 3), "% ", data$spikes@isoname, "."))
+        })
+    }
+    
+    output$label1_error <- generate_label_error(1)
+    output$label2_error <- generate_label_error(2)
+    output$label3_error <- generate_label_error(3)   
+    output$label1_msg <- generate_label_msg(1)
+    output$label2_msg <- generate_label_msg(2)
+    output$label3_msg <- generate_label_msg(3) 
     
     # enrichment info output
     output$intensity_F_message <- renderUI({ 
         data <- labelsInput()
-        if (data$enrichF <= data$nat$abundance)
+        if (data$target.ab <= as.abundance(data$nat))
             return(paste0("Too small, target enrichment must exceed natural abundance."))
         else
             return ("")
@@ -244,6 +339,18 @@ shinyServer(function(input, output, session) {
             setProgress(message = 'Rendering plot ...')
             setProgress(value = 2)
             p <- plotInput()
+            setProgress(value = 4)
+            suppressWarnings(print(p))
+            setProgress(value = 5)
+        })
+    })
+    
+    # rendering plot2
+    output$plot2 <- renderPlot({
+        withProgress(session, min=1, max=5, {
+            setProgress(message = 'Rendering plot ...')
+            setProgress(value = 2)
+            p <- plot2Input()
             setProgress(value = 4)
             suppressWarnings(print(p))
             setProgress(value = 5)
