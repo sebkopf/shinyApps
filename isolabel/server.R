@@ -7,23 +7,6 @@ library(grid)
 library(plyr)
 library(reshape2)
 
-# isotope functions
-iso.RtoF<-function(ratio) ratio/(1+ratio) # ratio to fraction
-iso.FtoR<-function(frac) frac/(1-frac) # fraction to ratio
-iso.RtoD<-function(ratios, refs) ratios/refs - 1 #fraction to delta value (NOT 1000x!!)
-iso.RtoDx<-function(ratios, refs) iso.RtoD(ratios, refs)*1000 #fraction to delta value (1000x)
-iso.DtoR<-function(deltas, refs) (deltas+1) * refs #delta to fraction (delta NOT 1000x!!)
-iso.DxtoR<-function(deltas, refs) iso.DtoR(deltas/1000, refs) #delta to fraction (deltas are 1000x)
-iso.FtoD<-function(fracs, refs) iso.RtoD(iso.FtoR(fracs), refs) #fractions to delta values (deltas NOT 1000x)
-iso.FtoDx<-function(fracs, refs) iso.FtoD(fracs, refs)*1000 #fractions to delta values  (deltas are 1000x)
-iso.DtoF<-function(deltas, refs) iso.RtoF(iso.DtoR(deltas, refs)) #delta values to fractions (deltas NOT 1000x)
-iso.DxtoF<-function(deltas, refs) iso.DtoF(deltas/1000, refs) #delta values to fractions (deltas are 1000x)
-iso.DtoA<-function(deltas1, deltas2) (deltas1 + 1)/(deltas2 + 1) #delta notation to alpha fractionation factor (not 1000X)
-iso.DxtoA<-function(deltas1, deltas2) iso.DtoA(deltas1/1000, deltas2/1000) #delta (in permil, i.e. 1000x) to alpha
-iso.AtoEx<-function(alphas) (alphas-1)*1000 #alpha to epsilon (as permill, i.e. 1000x)
-iso.ExtoA<-function(eps) eps/1000 + 1 #epsilon in permil to alpha
-iso.DxtoEx<-function(deltas1, deltas2) iso.AtoEx(iso.DxtoA(deltas1, deltas2)) # from delta notation (in permil, i.e. 1000x) to epsilon in permil
-
 #' Register isotope reference materials 
 use_permil(TRUE)
 register_standard(ratio(`2H` = 0.00015575, major = "1H", compound = "VSMOW"))
@@ -31,15 +14,6 @@ register_standard(ratio(`13C` = 0.011237, major = "12C", compound = "VPDB"))
 register_standard(ratio(`15N` = 0.003677, major = "14N", compound = "Air"))
 register_standard(ratio(`18O` = 0.0020052, major = "16O", compound = "VSMOW"))
 register_standard(ratio(`34S` = 0.0045005, major = "32S", compound = "CDT"))
-
-c.R_nat <<- mutate(data.frame(
-    minor = c("2H", "13C", "15N", "18O", "34S"),
-    major = c("1H", "12C", "14N", "16O", "32S"),
-    ratio = c(0.00015575, 0.011237, 0.003677, 0.0020052, 0.0045005),
-    ref = c("VSMOW", "VPDB", "Air", "VSMOW", "CDT"),
-    stringsAsFactors=F),
-    abundance = iso.RtoF(ratio),
-    label = paste0(minor, "/", major))
 
 #' Duration labels to the closest large denominator (e.g. 86400s = ~24 hours)
 #'@param ds vector of lubridate:::duration objects or time in seconds
