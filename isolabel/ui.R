@@ -15,11 +15,12 @@ dblt_picker <- function(i, value = 1, unit = c("minute", "hour", "day", "week", 
 label_picker <- function(vols, concs, strengths) {
     r <- list(
         fluidRow(
+            # adds up to 12 with the offsets
             column(3, offset = 1, strong("Volume")),
-            column(3, offset = 1, strong("Conc.")),
-            column(3, offset = 1, strong("Strength"))),
+            column(3, offset = 1, strong("Concentration")),
+            column(3, offset = 1, strong(htmlOutput("rare_iso_header")))),
         fluidRow(
-            column(1, "ref"),
+            column(1, span("init", title = "The initial isotopic composition of the sample.")),
             column(3, numericInput("label.ref_vol", "", 1000, min = 0)),
             column(3, offset = 1, numericInput("label.ref_conc", "", 1, min = 0)),
             column(3, offset = 1, "natural")
@@ -28,7 +29,7 @@ label_picker <- function(vols, concs, strengths) {
     for (i in 1:length(strengths)) {
         r <- c(r, list(
             fluidRow(
-                column(1, i),
+                column(1, span(paste0("s#", i), title = paste0("Isotope spike #", i))),
                 column(3, numericInput(paste0("label", i, "_vol"), "", vols[i], min = 0)),
                 column(3, offset = 1, numericInput(paste0("label", i, "_conc"), "", concs[i], min = 0)),
                 column(3, offset = 1, sliderInput(paste0("label", i), "", min = 0, max = 1, step = 0.01, value = strengths[i], format="#.#%"))
@@ -40,7 +41,7 @@ label_picker <- function(vols, concs, strengths) {
         ))
     }
     r <- c(r, list(
-        checkboxGroupInput(inputId="show", label="Show labeling strengths:", choices=1:length(strengths), selected=1:length(strengths)),
+        checkboxGroupInput(inputId="show", label="Show labeling strengths (spike #):", choices=1:length(strengths), selected=1:length(strengths)),
         tags$style(type="text/css", HTML("#show>*{float: left; margin-right: 15px; height: 20px;} #show {height: 20px;}"))))
     r
 }
@@ -66,18 +67,19 @@ shinyUI(
             
             # side bar panel
             sidebarPanel(
-                h4("Isotope label"),
-                selectInput("ref", "", 
-                            choices = c("2H", "13C", "15N", "18O", "34S")),
+                fluidRow(
+                    column(4, h4("Isotope label:")),
+                    column(4, selectInput("ref", "", choices = c("2H", "13C", "15N", "18O", "34S")))
+                ),
                 
-#                h5("Label strengths"),
+                h5("Label strengths"),
                 label_picker(vols = c(1, 5, 10), concs = c(1, 1, 1), strengths = c(0.5, 0.5, 0.99)),
                 
-                h4("Target enrichment"),
+                h5("Target enrichment"),
                 radioButtons(
                     "targetType", "",
                     c(`Relative enrichment [in permil]` = "permil",
-                      `Total abundance [% light isotope]` = "frac"), selected="permil"),
+                      `Total abundance [% rare isotope]` = "frac"), selected="permil"),
                 
                 conditionalPanel(
                     condition = "input.targetType == 'permil'",
@@ -93,7 +95,7 @@ shinyUI(
                     tags$style(type="text/css", HTML("#intensity_F_message {color: #f50000;}"))
                 ),
                 
-                h4("Doubling times"),
+                h5("Generation times"),
                 dblt_picker(1, unit = "hour"),
                 dblt_picker(2, unit = "day"),
                 dblt_picker(3, unit = "month"),
@@ -106,29 +108,50 @@ shinyUI(
                 tags$head(tags$style(type="text/css", ".tab-content {overflow: visible;}")),
                 progressInit(),
                 
-                tabsetPanel(
-                    tabPanel("Labeling Times", 
-                             plotOutput("plot", height="600px"),
-                             downloadButton('downloadPlot', 'Download Plot')), 
-                    tabPanel("Enrichment Curves", 
-                             radioButtons(
-                                 "plot2DataType", "Y-axis in:",
-                                 c(`Enrichment [in permil]` = "permil",
-                                   `Total abundance [% light isotope]` = "frac"), selected="permil"),
-                             checkboxInput("plot2Y", "Log scale", FALSE),
-                             plotOutput("plot2", height="500px"),
-                             sliderInput("plot2Xzoom", "Time scale:",
-                                         min = 0.001, max = 1, step = 0.001, value = 1, 
-                                         format="#.#%")),
-                    tabPanel("Summary Table", 
-                             h4("Enrichment of different doubling times as function of label strength and incubation time"), 
+                tabsetPanel(id = "tabs",
+                    tabPanel(value = "plot1", "Labeling Times", 
+                             fluidRow(column(12, 
+                                 actionButton("updatePlot1", "Update Plot", icon("refresh")), 
+                                 downloadButton('downloadPlot', 'Download Plot'))),
+                             br(),
+                             plotOutput("plot", height="600px")),
+                    tabPanel(value = "plot2", "Enrichment Curves", 
+                            fluidRow(
+                                column(4,
+                                   h5("Y-axis (enrichment):"),
+                                   sliderInput("plot2Yzoom", "Zoom:",
+                                               min = 0.001, max = 1, step = 0.001, value = 1, 
+                                               format="#.#%"),
+                                   radioButtons(
+                                       "plot2DataType", "",
+                                       c(`Enrichment [in permil]` = "permil",
+                                         `Total abundance [% rare isotope]` = "frac"), selected="permil")
+                                ),
+                                column(4, 
+                                   h5("X-axis (time scale):"),
+                                   sliderInput("plot2Xzoom", "Zoom:",
+                                               min = 0.001, max = 1, step = 0.001, value = 1, 
+                                               format="#.#%")
+                                )
+                            ),
+                            fluidRow(column(12, 
+                                            actionButton("updatePlot2", "Update Plot", icon("refresh")), 
+                                            downloadButton('downloadPlot2', 'Download Plot'))),
+                            br(),
+                            plotOutput("plot2", height="500px")),
+                    tabPanel(value = "table", "Summary Table", 
+                             h4("Enrichment of different generation times as function of label strength and incubation time"), 
                              radioButtons(
                                  "tableDataType", "Report data in:",
                                  c(`Enrichment [in permil]` = "permil",
-                                   `Total abundance [% light isotope]` = "frac"), selected="permil"),
-                             tableOutput("table"),
-                             downloadButton('downloadTable', 'Download Table')),
-                    selected = "Labeling Times", position = "above")
+                                   `Total abundance [% rare isotope]` = "frac"), selected="permil"),
+                             fluidRow(column(12, 
+                                             actionButton("updateTable", "Update Table", icon("refresh")),
+                                             downloadButton('downloadTable', 'Download Table'))),
+                             br(),
+                             tableOutput("table")
+                    ),      
+                    selected = "plot1", position = "above", type = "pills")
             ), 
             
             position = "left"
