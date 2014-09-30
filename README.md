@@ -5,7 +5,16 @@ This repository is intended to hold the source code for all of my shiny apps (I'
 
 ## isolabel
 
-A shiny app for calculating expected enrichments from stable isotope labeling in microbial populations. There are several ways you can run this app.
+A shiny app for estimating expected enrichments from stable isotope labeling in microbial populations. Based on the isotopic enrichment resulting from unbiased clonal growth in the presence of an isotopic label.
+
+<!---
+URL encode using: http://www.url-encode-decode.com/urlencode
+F{\left(t\right)}=F_{N}\left(1-e^{-{\mu}\cdot{t}}\right)+F_{O}\cdot{e^{-{\mu}\cdot{t}}}
+-->
+
+![equation](http://latex.codecogs.com/gif.latex?F%7B%5Cleft%28t%5Cright%29%7D%3DF_%7BN%7D%5Cleft%281-e%5E%7B-%7B%5Cmu%7D%5Ccdot%7Bt%7D%7D%5Cright%29%2BF_%7BO%7D%5Ccdot%7Be%5E%7B-%7B%5Cmu%7D%5Ccdot%7Bt%7D%7D%7D)
+
+There are several ways you can run this app.
 
 ### Run online
 An online version is available [here](https://sebkopf.shinyapps.io/isolabel/) and should run from any javascript enabled browser without installing anything extra (but is not necessarily always the most up to date version although I will try to keep it current).
@@ -13,10 +22,11 @@ An online version is available [here](https://sebkopf.shinyapps.io/isolabel/) an
 ### Run locally
 To run the shiny app locally you need to install the following packages:
 ```coffee
-packages <- c("shiny", "ggplot2", "reshape2", "lubridate", "stringr", "devtools")
+packages <- c("shiny", "ggplot2", "reshape2", "lubridate", "stringr", "devtools", "plyr", "RColorBrewer")
 install.packages(packages, depen=T)
+library(devtools)
 devtools::install_github("shiny-incubator", "rstudio")
-devtools::install_github("isotopia", "sebkopf", "v0.1")
+devtools::install_github("isotopia", "sebkopf", "v0.4")
 ```
 
 #### Run locally from GitHub
