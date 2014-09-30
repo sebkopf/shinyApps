@@ -314,7 +314,7 @@ shinyServer(function(input, output, session) {
     # natural abundance info output
     output$nat <- renderUI({
         ref <- get_standard(minor = input$ref)
-        paste0("Reference ", get_label(ref), ": ", signif(get_value(ref), 4))
+        paste0("Reference: ", get_label(ref), ": ", signif(get_value(ref), 4))
     })
     
     # labeling strengths messages output
