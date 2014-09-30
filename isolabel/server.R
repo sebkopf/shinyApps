@@ -161,7 +161,7 @@ shinyServer(function(input, output, session) {
             
             # spikes data frame
             spikes.df <- mutate(data.frame(data[c("spikes", "vols", "concs", "strengths")]),
-                             Label = paste0("Vol: ", vols, ", Conc: ", concs, ", Strength: ", 100*strengths, "%"))
+                             Label = paste0("Dil=", vols, ":", input$label.ref_vol, ", Conc=", concs, ", ", input$ref, "=", 100*strengths, "at%"))
             
             # labeling times for plot
             plot.df <- label_time(

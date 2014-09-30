@@ -79,7 +79,7 @@ shinyUI(
                 radioButtons(
                     "targetType", "",
                     c(`Relative enrichment [in permil]` = "permil",
-                      `Total abundance [% rare isotope]` = "frac"), selected="permil"),
+                      `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
                 
                 conditionalPanel(
                     condition = "input.targetType == 'permil'",
@@ -125,7 +125,7 @@ shinyUI(
                                    radioButtons(
                                        "plot2DataType", "",
                                        c(`Enrichment [in permil]` = "permil",
-                                         `Total abundance [% rare isotope]` = "frac"), selected="permil")
+                                         `Total abundance [at% rare isotope]` = "frac"), selected="permil")
                                 ),
                                 column(4, 
                                    h5("X-axis (time scale):"),
@@ -144,7 +144,7 @@ shinyUI(
                              radioButtons(
                                  "tableDataType", "Report data in:",
                                  c(`Enrichment [in permil]` = "permil",
-                                   `Total abundance [% rare isotope]` = "frac"), selected="permil"),
+                                   `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
                              fluidRow(column(12, 
                                              actionButton("updateTable", "Update Table", icon("refresh")),
                                              downloadButton('downloadTable', 'Download Table'))),
