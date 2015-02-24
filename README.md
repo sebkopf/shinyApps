@@ -33,7 +33,6 @@ packages <- c("shiny", "ggplot2", "reshape2", "lubridate",
               "stringr", "devtools", "plyr", "RColorBrewer")
 install.packages(packages, depen=T)
 library(devtools)
-devtools::install_github("shiny-incubator", "rstudio")
 devtools::install_github("isotopia", "sebkopf", "v0.4")
 ```
 

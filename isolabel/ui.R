@@ -1,5 +1,4 @@
 library(shiny)
-library(shinyIncubator)
 
 # doubling time picking
 dblt_picker <- function(i, value = 1, unit = c("minute", "hour", "day", "week", "month", "year")) {
@@ -106,7 +105,6 @@ shinyUI(
             # Main panel / output
             mainPanel(
                 tags$head(tags$style(type="text/css", ".tab-content {overflow: visible;}")),
-                progressInit(),
                 
                 tabsetPanel(id = "tabs",
                     tabPanel(value = "plot1", "Labeling Times", 
