@@ -114,11 +114,11 @@ server <- shinyServer(function(input, output, session) {
   })
   
   output$slider_O_min <- renderUI({ 
-    sliderInput("range_O_min", "", min = 0, max = ceiling(max(get_linearity_data_O()$x)), step = 1, value = O_cutoff[1], post = "V")
+    sliderInput("range_O_min", "", min = 0, max = ceiling(max(get_linearity_data_O()$x)), step = 1, value = O_cutoff[1], post = " V")
   })
   
   output$slider_O_max <- renderUI({ 
-    sliderInput("range_O_max", "", min = 0, max = ceiling(max(get_linearity_data_O()$x)), step = 1, value = ceiling(max(get_linearity_data_O()$x)), post = "V")
+    sliderInput("range_O_max", "", min = 0, max = ceiling(max(get_linearity_data_O()$x)), step = 1, value = ceiling(max(get_linearity_data_O()$x)), post = " V")
   })
   
   get_cutoff_O <- reactive({
@@ -167,11 +167,11 @@ server <- shinyServer(function(input, output, session) {
   })
 
   output$slider_N_min <- renderUI({ 
-    sliderInput("range_N_min", "", min = 0, max = ceiling(max(get_linearity_data_N()$x)), step = 1, value = N_cutoff[1], post = "V")
+    sliderInput("range_N_min", "", min = 0, max = ceiling(max(get_linearity_data_N()$x)), step = 1, value = N_cutoff[1], post = " V")
   })
   
   output$slider_N_max <- renderUI({ 
-    sliderInput("range_N_max", "", min = 0, max = ceiling(max(get_linearity_data_N()$x)), step = 1, value = N_cutoff[2], post = "V")
+    sliderInput("range_N_max", "", min = 0, max = ceiling(max(get_linearity_data_N()$x)), step = 1, value = N_cutoff[2], post = " V")
   })
   
   get_cutoff_N <- reactive({

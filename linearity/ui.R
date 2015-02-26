@@ -50,7 +50,9 @@ shinyUI(
           column(width = 6, plotOutput("linearity_plot_N", width="400px"))
         ),
         br(),
-        downloadButton("summarize", "Generate Summary", icon("save"))
+        downloadButton("summarize", "Generate Summary", icon("save")),
+        br(),
+        ""
       )
     )
   )
