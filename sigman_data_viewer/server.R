@@ -28,7 +28,7 @@ N_cutoff <- c(4, 20) # [V]
 #                                    "size", "type", "datapath"), row.names = c("0", "1", "2", "3", 
 #                                                                               "4", "5"), class = "data.frame")
 
-server <- shinyServer(function(input, output, session) {
+shinyServer(function(input, output, session) {
   shinyFileChoose(input, 'files', session = session, roots=c(wd=root_dir),
                   filetypes=c('dxf'))
 
@@ -41,16 +41,19 @@ server <- shinyServer(function(input, output, session) {
   
   # isodat files
   get_isodat_files <- reactive({
-    files <- parseFilePaths(root_dir, input$files)
+    files <- parseFilePaths(root_dir, input$files)$name
+    
     #files <- temp_files # FIXME
-    if (nrow(files) > 0) {
+    if (length(files) > 0) {
+      
+      message("files in folder: ", list.files(get_isodat_folder(), pattern = "\\.dxf$"))
       
       iso_files <-
         withProgress(
           message = 'Loading data...', value = 0, {
             iso_files <- list()
-            for (file in files$name) {
-              incProgress(1/nrow(files), detail = paste0("Reading ", file, " ..."))
+            for (file in files) {
+              incProgress(1/length(files), detail = paste0("Reading ", file, " ..."))
               iso_files <- c(iso_files, isoread(file.path(get_isodat_folder(), file), type = "CFLOW"))
             }
             return(iso_files)
