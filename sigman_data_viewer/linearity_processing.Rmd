@@ -1,0 +1,52 @@
+---
+title: "Linearity"
+output: html_document
+---
+
+This is an example of how to run the linearity & ON/OFF summary generation for all folders with the ON OFFS or OnOffs name.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(knitr)
+library(ggplot2)
+library(RColorBrewer)
+library(gridExtra)
+library(lattice)
+library(isoread)
+library(plyr)
+source("utils.R")
+source("linearity.R")
+```
+
+### Settings
+
+```{r}
+settings <- dlply(read.csv("settings.csv", stringsAsFactors = FALSE), .(Variable), function(df) df$Value)
+kable(as.data.frame(settings))
+```
+
+### Find all ON/OFF folders
+
+```{r}
+folders <- grep("on ?offs?", list.dirs(settings$data_dir, recursive = F, full.names = F), value = T, ignore.case = T)
+message("Folders to load:\n", paste(folders, collapse = ", "))
+```
+
+### Process the folders
+
+```{r}
+for (folder in folders) {
+  tryCatch(
+    process_linearity_folder(
+      settings$data_dir, folder,
+      settings$cutoff_O_min, settings$cutoff_O_max,
+      settings$cutoff_N_min, settings$cutoff_N_max),
+    error = function(e) message(e))
+}
+```
+
+### Show summmary
+
+```{r}
+kable(read.csv(file.path(settings$data_dir, linearity_record_csv), check.names = F))
+```
+
