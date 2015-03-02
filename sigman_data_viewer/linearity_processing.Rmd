@@ -40,7 +40,7 @@ for (folder in folders) {
       settings$data_dir, folder,
       settings$cutoff_O_min, settings$cutoff_O_max,
       settings$cutoff_N_min, settings$cutoff_N_max),
-    error = function(e) message(e))
+    error = function(e) print(e))
 }
 ```
 
@@ -49,4 +49,3 @@ for (folder in folders) {
 ```{r}
 kable(read.csv(file.path(settings$data_dir, linearity_record_csv), check.names = F))
 ```
-

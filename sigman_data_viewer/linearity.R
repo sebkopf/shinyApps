@@ -93,6 +93,7 @@ generate_linearity_summary <- function(
   
   if (!is.null(summary_dir)) {
     summary <- data.frame(
+      `Timestamp` = paste(Sys.time()),
       `Run date & time` = paste(unique(subset(data_table, grepl("linearity", file))$date)),
       `Folder` = basename(folder),
       `Max ON/OFF Std. Dev. d18O` = max(on_off_table$`Std. Dev. d18O`),

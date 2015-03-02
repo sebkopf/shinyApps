@@ -15,12 +15,20 @@ shinyUI(
     
       # Tabs
       tabsetPanel(
-        id = "tabs", selected = "linearity_history_tab", position = "above", type = "tabs",
+        id = "linearity_tabs", selected = "linearity_history_tab", position = "above", type = "tabs",
+        
+        # Linearity history
+        tabPanel(
+          value = "linearity_history_tab", "History",        
+          br(),
+          fluidRow(column(width = 5, offset = 1, htmlOutput("linhis_date_range_widget"))),
+          plotOutput("linearity_history", height="600px", width = "900px")
+        ),
         
         # File Details
         tabPanel(
           value = "file_tab", 
-          shinyFilesButton('linearity_folder', 'Data', 'Please select the linearity & ON/OFF folder', FALSE, TRUE), 
+          shinyFilesButton('linearity_folder', 'New Data', 'Please select the linearity & ON/OFF folder', FALSE, TRUE), 
           br(),
           fluidRow(
             column(width = 3, htmlOutput("loaded_masses")),
@@ -56,13 +64,6 @@ shinyUI(
           downloadButton("summarize", "Save record & generate summary", icon("save")),
           br(),
           ""
-        ),
-        
-        # Linearity
-        tabPanel(
-          value = "linearity_history_tab", "History",        
-          br(),
-          plotOutput("linearity_history", height="600px", width = "900px")
         )
       )
     ),

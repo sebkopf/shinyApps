@@ -4,6 +4,7 @@ library(ggplot2)
 library(RColorBrewer)
 library(gridExtra)
 library(lattice)
+library(scales)
 library(isoread)
 library(plyr)
 #library(rCharts) 
@@ -34,12 +35,6 @@ shinyServer(function(input, output, session) {
   })
   output$settings <- renderUI(make_settings_UI(settings))
   output$settings_msg <- renderUI(HTML(get_settings()$msg))
-  
-  
-  
-#   shinyFileChoose(input, 'files', session = session, roots=c(wd=data_dir),
-#                   filetypes=c('dxf'))
-  
   
   # LINEARITY ============
   shinyFileChoose(input, 'linearity_folder', session = session, roots=c(wd=data_dir),
@@ -101,18 +96,77 @@ shinyServer(function(input, output, session) {
   make_linearity_plot_N <- reactive(make_linearity_plot("d15N [permil]", get_linearity_data_N(), get_xrange_N()))
   output$linearity_plot_N <- renderPlot(if (is_linearity_loaded() && length(get_xrange_N()) > 0) isolate(print(make_linearity_plot_N())))
  
-  # SUMMARY ========
+  # summary
   output$summarize <- downloadHandler(
     filename = function() {paste0(basename(get_linearity_folder()), "_summary.pdf")}, 
     content = function(file) { 
       withProgress(message = 'Generating summary', detail = "for linearity and ON/OFF data...", value = 0.5,             
                    generate_linearity_summary (
-                     get_linearity_folder(), get_linearity_data_table(), 
+                     file.path(data_dir, get_linearity_folder()), 
+                     get_linearity_data_table(), 
                      get_regression_O(), get_regression_N(),
                      make_linearity_plot_O(), make_linearity_plot_N(), 
                      save_download_file = file, summary_dir = data_dir)
       )
     })
+  
+  # history
+  get_linearity_history <- reactive({
+    get_linearity_folder() # make sure to trigger whenever there is a new folder loaded or tabs are changed
+    input$linearity_tabs
+    
+    summary_file <- file.path(data_dir, linearity_record_csv)
+    if (file.exists(summary_file)) {
+      data <- read.csv(file.path(data_dir, linearity_record_csv), check.names = F, stringsAsFactors = F)
+      data <- mutate(data, datetime = as.POSIXct(`Run date & time`), date = as.Date(datetime))
+      
+      # remove duplicates and sort
+      data.nodup <- subset(data[rev(order(data$Timestamp)),], !duplicated(datetime))
+      data.nodup <- data.nodup[order(data.nodup$datetime),] # sort by date time
+      
+      if (nrow(data.nodup) < nrow(data)) {
+        # some duplicates removed --> store again
+        message("Removing duplicates from history...")
+        write.table(data.nodup[!names(data.nodup) %in% c("datetime", "date")], file = summary_file, row.names = FALSE, sep = ",", col.names = TRUE)
+      }
+      
+      return(data.nodup)
+    } else
+      stop("No linearity history file yet stored at '", summary_file, "'")
+  })
+  
+  output$linhis_date_range_widget <- renderUI({
+    data <- get_linearity_history()
+    dateRangeInput("linhis_date_range", "", 
+                   start = min(data$date)[1], end = max(data$date)[1],
+                   min = min(data$date)[1], max = max(data$date)[1],
+                   format = "yyyy-mm-dd", startview = "month", weekstart = 0,
+                   language = "en", separator = " to ")
+  })
+  
+  make_linearity_history_plot <- reactive({
+    data <- subset(
+      get_linearity_history(), 
+      date >= input$linhis_date_range[1] & date <= input$linhis_date_range[2])
+    
+    # plot if any data selected
+    if (nrow(data) > 0) {
+      message("Plotting linearity history from ", input$linhis_date_range[1], " to ", input$linhis_date_range[2])
+      withProgress(message = 'Rendering plot', detail = "for linearity history...", value = 0.5, {
+        data.melt <- melt(data[c("date", "Linearity d15N slope [permil/V]", "Linearity d18O slope [permil/V]")],
+                          id.vars = "date")  
+        ggplot(data.melt, aes(date, value, fill = variable)) + 
+          geom_point(shape = 21, size = 4) +
+          scale_x_date("Date", labels = date_format("%b %d\n%Y")) + 
+          labs(y = "linearity slope [permil/V]", fill = "") + 
+          theme_bw() +
+          theme(text = element_text(size = 18), 
+                legend.position = "bottom", legend.direction = "vertical") 
+      })
+    } else 
+      plot.new()
+  })
+  output$linearity_history <- renderPlot(make_linearity_history_plot())
   
   
 #   # MORRIS chart (interactive rchart) - but is too slow
