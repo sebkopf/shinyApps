@@ -42,15 +42,14 @@ get_mass_traces <- function(isodat_files) {
 # PLOTTING ===========
 
 #' make isodat file mass plot
-#' @param isodat_files all isodat file objects
+#' @param mass_traces the combined mass traces from get_mass_traces()
 #' @param file filename of the one to plot
-plot_masses <- function(isodat_files, files, masses) {
+plot_masses <- function(mass_traces, files, masses) {
   if (length(files) > 0 && files[1] != "0") {
     message("Showing traces ", paste(masses, collapse=", "), " for ", paste(files, collapse = ", "))
     isolate({
       ggplot(
-        subset(get_mass_traces(isodat_files),
-               variable %in% masses & file %in% files),
+        subset(mass_traces, variable %in% masses & file %in% files),
         aes(time, signal, linetype = variable, colour = file)) +
         geom_line() +
         scale_x_continuous(expand = c(0,0)) + 

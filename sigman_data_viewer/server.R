@@ -60,6 +60,7 @@ shinyServer(function(input, output, session) {
       return(list())
   })
   get_linearity_data_table <- reactive(get_data_tables(get_linearity_files()))
+  get_linearity_mass_traces <- reactive(get_mass_traces(get_linearity_files()))
   
   # show linearity traces
   output$loaded_masses <- renderUI(make_trace_selector("selected_mass", get_linearity_files()))
@@ -67,7 +68,7 @@ shinyServer(function(input, output, session) {
   make_linearity_traces_plot <- reactive(
     if (is_linearity_loaded()) {
       withProgress(message = 'Rendering plot', detail = "for raw mass traces...", value = 0.5, 
-                   plot_masses(get_linearity_files(), input$selected_file, input$selected_mass))
+                   plot_masses(get_linearity_mass_traces(), input$selected_file, input$selected_mass))
     }
   )
   output$linearity_traces_plot <- renderPlot(make_linearity_traces_plot())
