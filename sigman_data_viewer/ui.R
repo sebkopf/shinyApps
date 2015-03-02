@@ -9,37 +9,31 @@ shinyUI(
     title = "Sigman Data Viewer",
     header = "",
     id = "menu", inverse = FALSE, 
-  #  tabPanel("Settings"),
-  #  tabPanel("Kaese"),
+    
+
     tabPanel("Linearity", value="linearity",
     
-      # Application headers
-      #titlePanel("Sigman Lab Linearity - Data Processing"),
-      #"This user interface is intended to facility looking at linearity and ON/OFF test data and logging the results",
-      #br(),
-      
-      # File selectoin
-      fluidRow(
-        column(width = 2, shinyFilesButton('files', 'Choose files', 'Please select the linearity and all ON/OFF files', TRUE)),
-        column(width = 10, checkboxInput("whole_folder", "Automatically load all files in selected folder", value = TRUE))
-      ),
-      hr(),
-  
       # Tabs
       tabsetPanel(
-        id = "tabs", selected = "file_tab", position = "above", type = "tabs",
+        id = "tabs", selected = "linearity_history_tab", position = "above", type = "tabs",
         
         # File Details
         tabPanel(
-          value = "file_tab", "File details", 
-          htmlOutput("loaded_files"),
-          plotOutput("mass_plot", height="600px", width = "800px")
+          value = "file_tab", 
+          shinyFilesButton('linearity_folder', 'Data', 'Please select the linearity & ON/OFF folder', FALSE, TRUE), 
+          br(),
+          fluidRow(
+            column(width = 3, htmlOutput("loaded_masses")),
+            column(width = 9, htmlOutput("loaded_files"))
+          ),
+          plotOutput("linearity_traces_plot", height="500px", width = "900px")
           #showOutput("massPlot", "morris") # not using this morris plot at the moment because it's too slow
         ),
         
+        
         # Linearity
         tabPanel(
-          value = "linearity_tab", "Linearity",        
+          value = "linearity_tab", "Evaluation",        
           br(),
           fluidRow(align="center",
             column(width = 1, "Range:"),
@@ -59,11 +53,30 @@ shinyUI(
             column(width = 6, plotOutput("linearity_plot_N", width="400px"))
           ),
           br(),
-          downloadButton("summarize", "Generate Summary", icon("save")),
+          downloadButton("summarize", "Save record & generate summary", icon("save")),
           br(),
           ""
+        ),
+        
+        # Linearity
+        tabPanel(
+          value = "linearity_history_tab", "History",        
+          br(),
+          plotOutput("linearity_history", height="600px", width = "900px")
         )
       )
-    )
+    ),
+  
+  # SETTINGS MENU ==========
+  
+  tabPanel(
+    "Settings", value = "settings",
+    h4("Please only edit these settings if you know what you're doing!", style = "color: #f50000;"),
+    htmlOutput("settings"),
+    br(),
+    actionButton("save_settings", "Save settings", icon("save")),
+    br(),br(),
+    strong(htmlOutput("settings_msg"), style = "color: #f50000;")
+  )
   )
 )

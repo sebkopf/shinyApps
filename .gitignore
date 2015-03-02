@@ -13,5 +13,5 @@
 *.xls
 
 # Output files
-*.hml
+*.html
 */data/*.csv
