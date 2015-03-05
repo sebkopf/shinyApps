@@ -28,7 +28,8 @@ shinyUI(
         # File Details
         tabPanel(
           value = "file_tab", 
-          shinyFilesButton('linearity_folder', 'New Data', 'Please select the linearity & ON/OFF folder', FALSE, TRUE), 
+          shinyFilesButton('linearity_folder', 'New Data', 'Please select the linearity & ON/OFF folder', 
+                           multiple = FALSE, folder_select = TRUE, sort_by = "Name", ascending = FALSE), 
           br(),
           fluidRow(
             column(width = 3, htmlOutput("loaded_masses")),

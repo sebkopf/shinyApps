@@ -114,44 +114,50 @@ shinyServer(function(input, output, session) {
   # history
   get_linearity_history <- reactive({
     get_linearity_folder() # make sure to trigger whenever there is a new folder loaded or tabs are changed
-    input$linearity_tabs
     
-    summary_file <- file.path(data_dir, linearity_record_csv)
-    if (file.exists(summary_file)) {
-      data <- read.csv(file.path(data_dir, linearity_record_csv), check.names = F, stringsAsFactors = F)
-      data <- mutate(data, datetime = as.POSIXct(`Run date & time`), date = as.Date(datetime))
+    if (input$linearity_tabs == "linearity_history_tab") { 
+      # makes sure to trigger on tab change but only retrieve data if it's actually the right tab
       
-      # remove duplicates and sort
-      data.nodup <- subset(data[rev(order(data$Timestamp)),], !duplicated(datetime))
-      data.nodup <- data.nodup[order(data.nodup$datetime),] # sort by date time
-      
-      if (nrow(data.nodup) < nrow(data)) {
-        # some duplicates removed --> store again
-        message("Removing duplicates from history...")
-        write.table(data.nodup[!names(data.nodup) %in% c("datetime", "date")], file = summary_file, row.names = FALSE, sep = ",", col.names = TRUE)
-      }
-      
-      return(data.nodup)
+      summary_file <- file.path(data_dir, linearity_record_csv)
+      if (file.exists(summary_file)) {
+        data <- read.csv(file.path(data_dir, linearity_record_csv), check.names = F, stringsAsFactors = F)
+        data <- mutate(data, datetime = as.POSIXct(`Run date & time`), date = as.Date(datetime))
+        
+        # remove duplicates and sort
+        data.nodup <- subset(data[rev(order(data$Timestamp)),], !duplicated(datetime))
+        data.nodup <- data.nodup[order(data.nodup$datetime),] # sort by date time
+        
+        if (nrow(data.nodup) < nrow(data)) {
+          # some duplicates removed --> store again
+          message("Removing duplicates from history...")
+          write.table(data.nodup[!names(data.nodup) %in% c("datetime", "date")], file = summary_file, row.names = FALSE, sep = ",", col.names = TRUE)
+        }
+        
+        return(data.nodup)
+      } else
+        stop("No linearity history file yet stored at '", summary_file, "'")
     } else
-      stop("No linearity history file yet stored at '", summary_file, "'")
+      return(data.frame())
   })
   
   output$linhis_date_range_widget <- renderUI({
-    data <- get_linearity_history()
-    dateRangeInput("linhis_date_range", "", 
-                   start = min(data$date)[1], end = max(data$date)[1],
-                   min = min(data$date)[1], max = max(data$date)[1],
-                   format = "yyyy-mm-dd", startview = "month", weekstart = 0,
-                   language = "en", separator = " to ")
+    if (nrow(data <- get_linearity_history()) > 0) {
+      dateRangeInput("linhis_date_range", "", 
+                     start = min(data$date)[1], end = max(data$date)[1],
+                     min = min(data$date)[1], max = max(data$date)[1],
+                     format = "yyyy-mm-dd", startview = "month", weekstart = 0,
+                     language = "en", separator = " to ")
+    }
   })
   
   make_linearity_history_plot <- reactive({
-    data <- subset(
-      get_linearity_history(), 
-      date >= input$linhis_date_range[1] & date <= input$linhis_date_range[2])
     
-    # plot if any data selected
-    if (nrow(data) > 0) {
+    # show if any data selected in the date range
+    # doing the sequential && to trigger the right reactivity 
+    if (nrow(data <- get_linearity_history()) > 0 &&
+          nrow(data <- subset(data, 
+            date >= input$linhis_date_range[1] & date <= input$linhis_date_range[2])) > 0) {
+      
       message("Plotting linearity history from ", input$linhis_date_range[1], " to ", input$linhis_date_range[2])
       withProgress(message = 'Rendering plot', detail = "for linearity history...", value = 0.5, {
         data.melt <- melt(data[c("date", "Linearity d15N slope [permil/V]", "Linearity d18O slope [permil/V]")],
