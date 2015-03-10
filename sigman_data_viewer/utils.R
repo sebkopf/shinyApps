@@ -1,5 +1,9 @@
 #' Utility functions for the data viewer
 
+"%||%" <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
 # DATA ===============
 
 #' Load isodat files

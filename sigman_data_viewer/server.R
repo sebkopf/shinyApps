@@ -180,13 +180,28 @@ shinyServer(function(input, output, session) {
   shinyFileChoose(input, 'data_folder', session = session, roots=c(wd=data_dir),
                   filetypes=c('NONEALLOWED'))
   
-  data <- reactiveValues(data_files = list())
+  data <- reactiveValues(
+    files = list(), # stores the isodat files
+    n2o_rt = NULL, # stores the n2o retention time settings
+    n2o = NULL, # stores the selection of n2o groups
+    std1 = NULL, # stores the selection of standard1 groups
+    std2 = NULL, # stores the selection of standard2 groups
+    exclude = NULL # stores the selection excluded samples
+  )
   
   # load data
   is_data_loaded <- reactive(!is.null(get_data_folder()))
   get_data_folder <- reactive({
     files <- parseFilePaths(data_dir, input$data_folder)
-    data$files <- list() # reset data files everytime the input folder changes
+    isolate({
+      data$files <- list() # reset data files everytime the input folder changes
+      data$n2o_rt <- NULL
+      data$n2o <- NULL
+      data$std1 <- NULL
+      data$std2 <- NULL
+      data$exclude <- NULL
+    })
+    #return("test") # FIXME for testing only
     return(sub("^(NA|\\.)?(.*)$", ".\\2", files[1,"datapath"]))
   })
   
@@ -208,6 +223,8 @@ shinyServer(function(input, output, session) {
               load_isodat_files (files[basename(files) %in% not_loaded_yet], function(file, n) incProgress(1/n, detail = paste0("Reading ", file, " ...")))
             }))
         }
+        # load("test.RDATA") # FIXME for testing only
+        # data$files <- out # FIXME for testing only
       })
     }
     return(data$files)
@@ -234,8 +251,9 @@ shinyServer(function(input, output, session) {
   output$rt_selector_widget <- renderUI({
     if (is_data_loaded()) {
       max_rt <- ceiling(max(get_data_files()[[1]]$get_mass_data()$time)/10)*10
+      value <- isolate(data$n2o_rt %||% get_settings()$n2o_rt)
       sliderInput("n2o_rt", "Retention time of N2O peaks", 
-                  min = 0, max = max_rt, step = 1, value = get_settings()$n2o_rt, post = " s")
+                  min = 0, max = max_rt, step = 1, value = value, post = " s")
     }
   })
   output$group_selector_widgets <- renderUI({
@@ -245,104 +263,106 @@ shinyServer(function(input, output, session) {
       groups <- get_file_groups()
       sum_groups <- ddply(groups, .(group), summarize, n = length(group))
       sum_groups <- sum_groups[order(-sum_groups$n),] # sorty by abundance
-      
-      # combine single occurance "groups" into other
-      cutoff <- 2
-      # UPDATE: currently not included the "other" category -- b/c how to select the right ones in plot if selected?
-      #sum_groups <- rbind(sum_groups, 
-      #                    data.frame(group = "All other", 
-      #                               n = sum(sum_groups$n[sum_groups$n <= cutoff])))
-      sum_groups <- subset(sum_groups, n > cutoff) #
-      sum_groups <- mutate(sum_groups, label = paste0(group, "... (", n, "x)"))
-      
-      # define options for drop downs
-      options <- setNames(sum_groups$group, sum_groups$label)
-      n2o <- grepl(get_settings()$lab_ref, options)
-      std1 <- grepl(get_settings()$std1, options)
-      std2 <- grepl(get_settings()$std2, options)
-      #samples <- !(n2o | std1 | std2)
-    
-      # MAYBE IMPLEMENT -- chrom load upon double click
-      # for how to implement, check: http://stackoverflow.com/questions/26208677/double-click-in-r-shiny
-      
-      # generate UI
-      list(
-        selectInput("n2o_select", "Lab reference standard", 
-                    options, multiple=TRUE, selectize=FALSE, size = 3,
-                    selected = options[n2o]),
-        selectInput("std1_select", "Isotope standard #1", 
-                    options, multiple=TRUE, selectize=FALSE, size = 3,
-                    selected = options[std1]),
-        selectInput("std2_select", "Isotope standard #2", 
-                    options, multiple=TRUE, selectize=FALSE, size = 3,
-                    selected = options[std2]),
-        selectInput("exclude_select", "Exclude from analysis", 
-                    groups$file, multiple=TRUE, selectize=FALSE, size = 5)
-        # UPDATE: for now just assuming that everything else is samples
-        #selectInput("samples_select", "Samples", 
-        #            options, multiple=TRUE, selectize=FALSE, size = 3,
-        #            selected = options[samples])
-      )
+
+#       # cutoff groups 
+#       cutoff <- 2
+#       sum_groups <- subset(sum_groups_all, n > cutoff) 
+#       if (nrow(sum_groups) == 0) sum_groups <- sum_groups_all
+#       sum_groups <- mutate(sum_groups, label = paste0(group, "... (", n, "x)"))
+
+      # define options for drop downs and make dropdowns  
+      isolate({
+        
+        options <- setNames(sum_groups$group, sum_groups$label)
+        
+        n2o <- isolate(data$n2o %||% grep(get_settings()$lab_ref, options, value = T))
+        std1 <- isolate(data$std1 %||% grep(get_settings()$std1, options, value = T))
+        std2 <- isolate(data$std2 %||% grep(get_settings()$std2, options, value = T))
+        exclude <- isolate(data$exclude %||% c())
+ 
+        # MAYBE IMPLEMENT -- chrom load upon double click
+        # for how to implement, check: http://stackoverflow.com/questions/26208677/double-click-in-r-shiny
+        
+        # generate UI
+        list(
+          selectInput("n2o_select", "Lab reference standard", 
+                      options, multiple=TRUE, selectize=FALSE, size = 3, selected = n2o),
+          selectInput("std1_select", "Isotope standard #1", 
+                      options, multiple=TRUE, selectize=FALSE, size = 3, selected = std1),
+          selectInput("std2_select", "Isotope standard #2", 
+                      options, multiple=TRUE, selectize=FALSE, size = 3, selected = std2),
+          selectInput("exclude_select", "Exclude from analysis", 
+                      groups$file, selected = exclude, multiple=TRUE, selectize=FALSE, size = 5)
+        )
+      })
     }
   })
 
   # maek the overview plot
   make_overview_plot <- reactive({
-    if (is_data_loaded() && !is.null(input$n2o_rt)) {
+    if ( length(get_data_files()) > 0 && !is.null(input$n2o_rt)) {
       
       message("Plotting data overview ")
+      data$n2o_rt <- input$n2o_rt
+      data$n2o <- input$n2o_select
+      data$std1 <- input$std1_select
+      data$std2 <- input$std2_select
+      data$exclude <- input$exclude_select
+      input$data_type_selector # trigger on change but no need to store in data b/c input widget not generated upon data (re)load
       
-      withProgress(detail = "for data overview...", value = 0, {
-        setProgress(0.2, "Compiling data")
-        
-        # get N2O peaks
-        dt <- subset(get_data_table(), Start <= input$n2o_rt & End >= input$n2o_rt)
-        dt <- merge(dt, get_file_groups(), by = "file")
-              
-        if (nrow(dt) == 0) 
-          stop("No peaks found at this retention time. Please check where the N2O peaks are.")
-         
-        # determine grouping and analysis number
-        is_in_group <- function(group, groups) {
-          grepl(paste0("(", paste(groups, collapse = "|"), ")"), group)
-        }
-        
-        dt <- mutate(dt,
-          analysis = as.numeric(sub("^MAT253(\\d+)_.*$", "\\1", file)),
-          panel = 
-            ifelse(is_in_group(group, input$n2o_select), "Lab ref",
-                   ifelse(is_in_group(group, input$std1_select), "Standard 1",
-                          ifelse(is_in_group(group, input$std2_select), "Standard 2",
-                                 "Samples"))),
-          color = ifelse(panel == "Samples", "Samples", name),
-          size = `Intensity All`)
-        
-        # y choice
-        y_choices <- c(" 15N/14N" = "d15N [permil]", " 18O/16O" = "d18O [permil]", "Intensity All" = "Area All [Vs]")
-        dt$y <- dt[[input$data_type_selector]]
-        
-        # remove excluded
-        if (length(input$exclude_select) > 0) {
-          dt <- mutate(dt, 
-                       panel = ifelse(file %in% input$exclude_select, "Excluded", panel),
-                       size = ifelse(panel == "Excluded", median(size), size))
-        }
-        
-        # factor panel for right order
-        dt <- mutate(dt, panel.F = factor(panel, 
-                levels = c("Lab ref", "Standard 1", "Standard 2", "Samples", "Excluded")))
-        
-        setProgress(0.5, "Constructing plot")      
-        p <- ggplot(dt, aes(analysis, y, fill = color, size = size)) + 
-          geom_point(shape = 21) + 
-          scale_x_continuous(breaks = seq(min(dt$analysis), max(dt$analysis), by = 4)) + 
-          scale_size_continuous(range = c(1,4)) +
-          theme_bw() + labs(x = "Analysis #", y = y_choices[[input$data_type_selector]], fill = "", size = "Area All [Vs]") + 
-          theme(text = element_text(size = 18), axis.text.x = element_text(angle = 60, hjust = 1),
-                legend.position = "right", legend.direction = "vertical") +
-          facet_grid(panel.F~., scales = "free_y")
-        setProgress(0.8, "Rendering plot")
-        return(p)
+      isolate({
+        withProgress(detail = "for data overview...", value = 0, {
+          setProgress(0.2, "Compiling data")
+          
+          # get N2O peaks
+          dt <- subset(isolate(get_data_table()), Start <= data$n2o_rt & End >= data$n2o_rt)
+          dt <- merge(dt, isolate(get_file_groups()), by = "file")
+                
+          if (nrow(dt) == 0) 
+            stop("No peaks found at this retention time. Please check where the N2O peaks are.")
+           
+          # determine grouping and analysis number
+          is_in_group <- function(group, groups) {
+            grepl(paste0("(", paste(groups, collapse = "|"), ")"), group)
+          }
+          
+          dt <- mutate(dt,
+            analysis = as.numeric(sub("^MAT253(\\d+)_.*$", "\\1", file)),
+            panel = 
+              ifelse(is_in_group(group, data$n2o), "Lab ref",
+                     ifelse(is_in_group(group, data$std1), "Standard 1",
+                            ifelse(is_in_group(group, data$std2), "Standard 2",
+                                   "Samples"))),
+            color = ifelse(panel == "Samples", "Samples", name),
+            size = `Intensity All`)
+          
+          # y choice
+          y_choices <- c(" 15N/14N" = "d15N [permil]", " 18O/16O" = "d18O [permil]", "Intensity All" = "Area All [Vs]")
+          dt$y <- dt[[input$data_type_selector]]
+          
+          # remove excluded
+          if (length(data$exclude) > 0) {
+            dt <- mutate(dt, 
+                         panel = ifelse(file %in% data$exclude, "Excluded", panel),
+                         size = ifelse(panel == "Excluded", median(size), size))
+          }
+          
+          # factor panel for right order
+          dt <- mutate(dt, panel.F = factor(panel, 
+                  levels = c("Lab ref", "Standard 1", "Standard 2", "Samples", "Excluded")))
+          
+          setProgress(0.5, "Constructing plot")      
+          p <- ggplot(dt, aes(analysis, y, fill = color, size = size)) + 
+            geom_point(shape = 21) + 
+            scale_x_continuous(breaks = seq(min(dt$analysis), max(dt$analysis), by = 4)) + 
+            scale_size_continuous(range = c(1,4)) +
+            theme_bw() + labs(x = "Analysis #", y = y_choices[[input$data_type_selector]], fill = "", size = "Area All [Vs]") + 
+            theme(text = element_text(size = 18), axis.text.x = element_text(angle = 60, hjust = 1),
+                  legend.position = "right", legend.direction = "vertical") +
+            facet_grid(panel.F~., scales = "free_y")
+          setProgress(0.8, "Rendering plot")
+          return(p)
+        })
       })
       
     }
