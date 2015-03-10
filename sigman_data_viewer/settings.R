@@ -12,7 +12,7 @@ make_settings_UI <- function(settings) {
                  numericInput(paste0("setting_", Variable), 
                               paste0(Label, " [", Units, "]"), 
                               value = Value)
-               else textInput(paste0("setting_", Variable), "", value = Value)
+               else textInput(paste0("setting_", Variable), Label, value = Value)
              )
            })
     )

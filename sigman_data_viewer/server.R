@@ -13,10 +13,10 @@ library(plyr)
 source("utils.R")
 source("settings.R")
 source("linearity.R")
+source("data.R")
 
 # SERVER =====
 shinyServer(function(input, output, session) {
-  
   
   # SETTINGS =======
   settings <- read.csv("settings.csv", stringsAsFactors = FALSE)
@@ -33,7 +33,7 @@ shinyServer(function(input, output, session) {
     }
     return (c(dlply(sets, .(Variable), function(df) df$Value), list(msg = msg)))
   })
-  output$settings <- renderUI(make_settings_UI(settings))
+  output$settings <- renderUI(make_settings_UI(settings)) 
   output$settings_msg <- renderUI(HTML(get_settings()$msg))
   
   # LINEARITY ============
@@ -59,8 +59,8 @@ shinyServer(function(input, output, session) {
     } else 
       return(list())
   })
-  get_linearity_data_table <- reactive(get_data_tables(get_linearity_files()))
-  get_linearity_mass_traces <- reactive(get_mass_traces(get_linearity_files()))
+  get_linearity_data_table <- reactive(get_isodat_data_tables(get_linearity_files()))
+  get_linearity_mass_traces <- reactive(get_isodat_mass_traces(get_linearity_files()))
   
   # show linearity traces
   output$loaded_masses <- renderUI(make_trace_selector("selected_mass", get_linearity_files()))
@@ -175,6 +175,186 @@ shinyServer(function(input, output, session) {
   })
   output$linearity_history <- renderPlot(make_linearity_history_plot())
   
+  
+  # DATA ==================
+  shinyFileChoose(input, 'data_folder', session = session, roots=c(wd=data_dir),
+                  filetypes=c('NONEALLOWED'))
+  
+  data <- reactiveValues(data_files = list())
+  
+  # load data
+  is_data_loaded <- reactive(!is.null(get_data_folder()))
+  get_data_folder <- reactive({
+    files <- parseFilePaths(data_dir, input$data_folder)
+    data$files <- list() # reset data files everytime the input folder changes
+    return(sub("^(NA|\\.)?(.*)$", ".\\2", files[1,"datapath"]))
+  })
+  
+  get_data_files <- reactive({
+    if ( is_data_loaded() ) { 
+      
+      if (input$data_refresh > 0 && isolate(length(data$files)) > 0) 
+        message("Checking for newly added files in folder ", get_data_folder())
+      
+      # load all files that are not loaded yet
+      isolate({
+        files <- list.files(file.path(data_dir, get_data_folder()), pattern = "\\.dxf$", full.names = TRUE)
+        not_loaded_yet <- setdiff(basename(files), names(data$files)) # check which files have not been loaded yet
+        
+        if ( length(not_loaded_yet) > 0) {
+          data$files <- c(
+            data$files,
+            withProgress(message = 'Loading data...', value = 0, {
+              load_isodat_files (files[basename(files) %in% not_loaded_yet], function(file, n) incProgress(1/n, detail = paste0("Reading ", file, " ...")))
+            }))
+        }
+      })
+    }
+    return(data$files)
+  })
+  
+  # get specific aspects of these data files
+  get_data_table <- reactive(get_isodat_data_tables(get_data_files()))
+  get_file_groups <- reactive(get_data_file_groups(get_data_files()))
+  get_mass_traces <- reactive(get_isodat_mass_traces(get_data_files()))
+  
+  # show data traces
+  output$data_loaded_masses <- renderUI(make_trace_selector("data_selected_mass", get_data_files()))
+  output$data_loaded_files <- renderUI(make_file_selector("data_selected_file", get_data_files()))
+  make_data_traces_plot <- reactive(
+    if (is_data_loaded()) {
+      withProgress(message = 'Rendering plot', detail = "for raw mass traces...", value = 0.5, 
+                   plot_masses(get_mass_traces(), input$data_selected_file, input$data_selected_mass))
+    }
+  )
+  output$data_traces_plot <- renderPlot(make_data_traces_plot())
+  
+  # data selection and overview
+  output$loaded_data_folder <- renderText(paste("Loaded folder:", basename(get_data_folder())))
+  output$rt_selector_widget <- renderUI({
+    if (is_data_loaded()) {
+      max_rt <- ceiling(max(get_data_files()[[1]]$get_mass_data()$time)/10)*10
+      sliderInput("n2o_rt", "Retention time of N2O peaks", 
+                  min = 0, max = max_rt, step = 1, value = get_settings()$n2o_rt, post = " s")
+    }
+  })
+  output$group_selector_widgets <- renderUI({
+    if (is_data_loaded()) {
+      
+      # assemble groups  
+      groups <- get_file_groups()
+      sum_groups <- ddply(groups, .(group), summarize, n = length(group))
+      sum_groups <- sum_groups[order(-sum_groups$n),] # sorty by abundance
+      
+      # combine single occurance "groups" into other
+      cutoff <- 2
+      # UPDATE: currently not included the "other" category -- b/c how to select the right ones in plot if selected?
+      #sum_groups <- rbind(sum_groups, 
+      #                    data.frame(group = "All other", 
+      #                               n = sum(sum_groups$n[sum_groups$n <= cutoff])))
+      sum_groups <- subset(sum_groups, n > cutoff) #
+      sum_groups <- mutate(sum_groups, label = paste0(group, "... (", n, "x)"))
+      
+      # define options for drop downs
+      options <- setNames(sum_groups$group, sum_groups$label)
+      n2o <- grepl(get_settings()$lab_ref, options)
+      std1 <- grepl(get_settings()$std1, options)
+      std2 <- grepl(get_settings()$std2, options)
+      #samples <- !(n2o | std1 | std2)
+    
+      # MAYBE IMPLEMENT -- chrom load upon double click
+      # for how to implement, check: http://stackoverflow.com/questions/26208677/double-click-in-r-shiny
+      
+      # generate UI
+      list(
+        selectInput("n2o_select", "Lab reference standard", 
+                    options, multiple=TRUE, selectize=FALSE, size = 3,
+                    selected = options[n2o]),
+        selectInput("std1_select", "Isotope standard #1", 
+                    options, multiple=TRUE, selectize=FALSE, size = 3,
+                    selected = options[std1]),
+        selectInput("std2_select", "Isotope standard #2", 
+                    options, multiple=TRUE, selectize=FALSE, size = 3,
+                    selected = options[std2]),
+        selectInput("exclude_select", "Exclude from analysis", 
+                    groups$file, multiple=TRUE, selectize=FALSE, size = 5)
+        # UPDATE: for now just assuming that everything else is samples
+        #selectInput("samples_select", "Samples", 
+        #            options, multiple=TRUE, selectize=FALSE, size = 3,
+        #            selected = options[samples])
+      )
+    }
+  })
+
+  # maek the overview plot
+  make_overview_plot <- reactive({
+    if (is_data_loaded() && !is.null(input$n2o_rt)) {
+      
+      message("Plotting data overview ")
+      
+      withProgress(detail = "for data overview...", value = 0, {
+        setProgress(0.2, "Compiling data")
+        
+        # get N2O peaks
+        dt <- subset(get_data_table(), Start <= input$n2o_rt & End >= input$n2o_rt)
+        dt <- merge(dt, get_file_groups(), by = "file")
+              
+        if (nrow(dt) == 0) 
+          stop("No peaks found at this retention time. Please check where the N2O peaks are.")
+         
+        # determine grouping and analysis number
+        is_in_group <- function(group, groups) {
+          grepl(paste0("(", paste(groups, collapse = "|"), ")"), group)
+        }
+        
+        dt <- mutate(dt,
+          analysis = as.numeric(sub("^MAT253(\\d+)_.*$", "\\1", file)),
+          panel = 
+            ifelse(is_in_group(group, input$n2o_select), "Lab ref",
+                   ifelse(is_in_group(group, input$std1_select), "Standard 1",
+                          ifelse(is_in_group(group, input$std2_select), "Standard 2",
+                                 "Samples"))),
+          color = ifelse(panel == "Samples", "Samples", name),
+          size = `Intensity All`)
+        
+        # y choice
+        y_choices <- c(" 15N/14N" = "d15N [permil]", " 18O/16O" = "d18O [permil]", "Intensity All" = "Area All [Vs]")
+        dt$y <- dt[[input$data_type_selector]]
+        
+        # remove excluded
+        if (length(input$exclude_select) > 0) {
+          dt <- mutate(dt, 
+                       panel = ifelse(file %in% input$exclude_select, "Excluded", panel),
+                       size = ifelse(panel == "Excluded", median(size), size))
+        }
+        
+        # factor panel for right order
+        dt <- mutate(dt, panel.F = factor(panel, 
+                levels = c("Lab ref", "Standard 1", "Standard 2", "Samples", "Excluded")))
+        
+        setProgress(0.5, "Constructing plot")      
+        p <- ggplot(dt, aes(analysis, y, fill = color, size = size)) + 
+          geom_point(shape = 21) + 
+          scale_x_continuous(breaks = seq(min(dt$analysis), max(dt$analysis), by = 4)) + 
+          scale_size_continuous(range = c(1,4)) +
+          theme_bw() + labs(x = "Analysis #", y = y_choices[[input$data_type_selector]], fill = "", size = "Area All [Vs]") + 
+          theme(text = element_text(size = 18), axis.text.x = element_text(angle = 60, hjust = 1),
+                legend.position = "right", legend.direction = "vertical") +
+          facet_grid(panel.F~., scales = "free_y")
+        setProgress(0.8, "Rendering plot")
+        return(p)
+      })
+      
+    }
+  })
+  output$data_overview_plot <- renderPlot(make_overview_plot())
+  
+  output$data_overview_download <- downloadHandler(
+    filename = function() {paste0(basename(get_data_folder()), "_overview.pdf")}, 
+    content = function(file) { 
+      device <- function(..., version="1.4") grDevices::pdf(..., version=version)
+      ggsave(file = file, plot = make_overview_plot(), width = 12, height = 8, device = device)
+    })
   
 #   # MORRIS chart (interactive rchart) - but is too slow
 #   output$massPlot <- renderChart2({

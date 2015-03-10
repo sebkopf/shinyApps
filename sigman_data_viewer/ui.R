@@ -10,35 +10,87 @@ shinyUI(
     header = "",
     id = "menu", inverse = FALSE, 
     
-
-    tabPanel("Linearity", value="linearity",
     
+    # DATA MENU
+    tabPanel(
+      "Data", value="data",
+      
       # Tabs
       tabsetPanel(
-        id = "linearity_tabs", selected = "linearity_history_tab", position = "above", type = "tabs",
+        id = "data_tabs", selected = "data_folder_tab", position = "above", type = "tabs",
         
-        # Linearity history
-        tabPanel(
-          value = "linearity_history_tab", "History",        
-          br(),
-          fluidRow(column(width = 5, offset = 1, htmlOutput("linhis_date_range_widget"))),
-          plotOutput("linearity_history", height="600px", width = "900px")
-        ),
+        # data history - NOT currently implemented
+        #       tabPanel(
+        #         value = "data_history_tab", "History",        
+        #         br(),
+        #         fluidRow(column(width = 5, offset = 1, htmlOutput("datahis_date_range_widget"))),
+        #         plotOutput("data_history", height="600px", width = "900px")
+        #       ),
         
         # File Details
         tabPanel(
-          value = "file_tab", 
-          shinyFilesButton('linearity_folder', 'New Data', 'Please select the linearity & ON/OFF folder', 
-                           multiple = FALSE, folder_select = TRUE, sort_by = "Name", ascending = FALSE), 
+          value = "data_folder_tab", "Data", 
           br(),
           fluidRow(
-            column(width = 3, htmlOutput("loaded_masses")),
+            column(width = 3, 
+                   shinyFilesButton('data_folder', 'Click to select data folder', 'Please select the linearity & ON/OFF folder', 
+                                    multiple = FALSE, folder_select = TRUE, sort_by = "Name", ascending = FALSE),
+                   br(), br(),
+                   htmlOutput("data_loaded_masses")),
+            column(width = 9, htmlOutput("data_loaded_files"))
+          ),
+          plotOutput("data_traces_plot", height="500px", width = "900px")
+        ),
+        
+        # Overviews
+        tabPanel(
+          value = "data_overview", "Overview",
+          sidebarLayout(
+            sidebarPanel(
+              fluidRow(
+                column(width = 8, h4(textOutput("loaded_data_folder"))),
+                column(width = 4, align="right", actionButton("data_refresh", "Fetch new", icon("refresh")))),
+              radioButtons("data_type_selector", "Data to show:", inline = TRUE, 
+                           c("d15N" = " 15N/14N",
+                             "d18O" = " 18O/16O",
+                             "Area All" = "Intensity All")),
+              htmlOutput("rt_selector_widget"),
+              htmlOutput("group_selector_widgets")
+            ),
+            mainPanel(
+              plotOutput("data_overview_plot", height="600px", width = "900px"),
+              downloadButton("data_overview_download", "Download", icon("save"))
+            )
+          )
+        )
+        
+      )
+    ),
+    
+    
+    # LINEATIY ====
+    tabPanel(
+      "Linearity", value="linearity",
+    
+      # Tabs
+      tabsetPanel(
+        id = "linearity_tabs", selected = "file_tab", position = "above", type = "tabs",
+        
+        # File Details
+        tabPanel(
+          value = "file_tab", "Linearity data",
+          br(),
+          fluidRow(
+            column(width = 3, 
+                   shinyFilesButton('linearity_folder', 'Click to select data folder', 'Please select the linearity & ON/OFF folder', 
+                                    multiple = FALSE, folder_select = TRUE, sort_by = "Name", ascending = FALSE),
+                   br(), br(),
+                   htmlOutput("loaded_masses")),
             column(width = 9, htmlOutput("loaded_files"))
           ),
           plotOutput("linearity_traces_plot", height="500px", width = "900px")
           #showOutput("massPlot", "morris") # not using this morris plot at the moment because it's too slow
         ),
-        
         
         # Linearity
         tabPanel(
@@ -65,10 +117,18 @@ shinyUI(
           downloadButton("summarize", "Save record & generate summary", icon("save")),
           br(),
           ""
+        ),
+        
+        # Linearity history
+        tabPanel(
+          value = "linearity_history_tab", "History",        
+          br(),
+          fluidRow(column(width = 5, offset = 1, htmlOutput("linhis_date_range_widget"))),
+          plotOutput("linearity_history", height="600px", width = "900px")
         )
       )
     ),
-  
+    
   # SETTINGS MENU ==========
   
   tabPanel(
@@ -76,9 +136,9 @@ shinyUI(
     h4("Please only edit these settings if you know what you're doing!", style = "color: #f50000;"),
     htmlOutput("settings"),
     br(),
-    actionButton("save_settings", "Save settings", icon("save")),
-    br(),br(),
-    strong(htmlOutput("settings_msg"), style = "color: #f50000;")
-  )
+    strong(htmlOutput("settings_msg"), style = "color: #f50000;"),
+    br(),
+    actionButton("save_settings", "Save settings", icon("save"))
+    )
   )
 )

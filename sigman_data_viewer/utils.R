@@ -17,8 +17,10 @@ load_isodat_files <- function(files, progress = NULL) {
 
 #' Combine isodat files' data tables
 #' @param isodat_files isodat objects
-get_data_tables <- function(isodat_files) {
-  do.call(rbind, lapply(isodat_files, function(i) mutate(i$get_data_table(), file = i$filename, date = i$creation_date)))
+get_isodat_data_tables <- function(isodat_files, select = names(isodat_files[[1]]$get_data_table())) {
+  do.call(rbind, lapply(isodat_files, function(i) {
+    mutate(i$get_data_table()[select], file = i$filename, date = i$creation_date)
+  }))
 }
 
 #' get a subset of the data table and prepare it for plotting by assigning x and y
@@ -35,7 +37,7 @@ get_plot_data_table <- function(data_table, pattern, x, y) {
 
 #' Combine isodat files' mass traces
 #' @param isodat_files isodat objects
-get_mass_traces <- function(isodat_files) {
+get_isodat_mass_traces <- function(isodat_files) {
   do.call(rbind, lapply(isodat_files, function(i) mutate(i$get_mass_data(melt = T)[c("time", "signal", "variable")], file = i$filename)))
 }
 
