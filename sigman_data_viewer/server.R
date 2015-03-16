@@ -263,13 +263,8 @@ shinyServer(function(input, output, session) {
       groups <- get_file_groups()
       sum_groups <- ddply(groups, .(group), summarize, n = length(group))
       sum_groups <- sum_groups[order(-sum_groups$n),] # sorty by abundance
-
-#       # cutoff groups 
-#       cutoff <- 2
-#       sum_groups <- subset(sum_groups_all, n > cutoff) 
-#       if (nrow(sum_groups) == 0) sum_groups <- sum_groups_all
-#       sum_groups <- mutate(sum_groups, label = paste0(group, "... (", n, "x)"))
-
+      sum_groups <- mutate(sum_groups, label = paste0(group, "... (", n, "x)"))
+      
       # define options for drop downs and make dropdowns  
       isolate({
         
@@ -278,7 +273,7 @@ shinyServer(function(input, output, session) {
         n2o <- isolate(data$n2o %||% grep(get_settings()$lab_ref, options, value = T))
         std1 <- isolate(data$std1 %||% grep(get_settings()$std1, options, value = T))
         std2 <- isolate(data$std2 %||% grep(get_settings()$std2, options, value = T))
-        exclude <- isolate(data$exclude %||% c())
+        exclude <- isolate(data$exclude %||% grep("(BLK|blank|BGD|Background|Conditioner)", groups$file, value = T))
  
         # MAYBE IMPLEMENT -- chrom load upon double click
         # for how to implement, check: http://stackoverflow.com/questions/26208677/double-click-in-r-shiny
@@ -298,74 +293,84 @@ shinyServer(function(input, output, session) {
     }
   })
 
-  # maek the overview plot
-  make_overview_plot <- reactive({
+  # get overview data
+  get_overview_data <- reactive({
     if ( length(get_data_files()) > 0 && !is.null(input$n2o_rt)) {
       
-      message("Plotting data overview ")
+      message("Compiling overview data")
       data$n2o_rt <- input$n2o_rt
       data$n2o <- input$n2o_select
       data$std1 <- input$std1_select
       data$std2 <- input$std2_select
       data$exclude <- input$exclude_select
-      input$data_type_selector # trigger on change but no need to store in data b/c input widget not generated upon data (re)load
       
       isolate({
-        withProgress(detail = "for data overview...", value = 0, {
-          setProgress(0.2, "Compiling data")
-          
-          # get N2O peaks
-          dt <- subset(isolate(get_data_table()), Start <= data$n2o_rt & End >= data$n2o_rt)
-          dt <- merge(dt, isolate(get_file_groups()), by = "file")
-                
-          if (nrow(dt) == 0) 
-            stop("No peaks found at this retention time. Please check where the N2O peaks are.")
-           
-          # determine grouping and analysis number
-          is_in_group <- function(group, groups) {
-            grepl(paste0("(", paste(groups, collapse = "|"), ")"), group)
-          }
-          
-          dt <- mutate(dt,
-            analysis = as.numeric(sub("^MAT253(\\d+)_.*$", "\\1", file)),
-            panel = 
-              ifelse(is_in_group(group, data$n2o), "Lab ref",
-                     ifelse(is_in_group(group, data$std1), "Standard 1",
-                            ifelse(is_in_group(group, data$std2), "Standard 2",
-                                   "Samples"))),
-            color = ifelse(panel == "Samples", "Samples", name),
-            size = `Intensity All`)
-          
-          # y choice
-          y_choices <- c(" 15N/14N" = "d15N [permil]", " 18O/16O" = "d18O [permil]", "Intensity All" = "Area All [Vs]")
-          dt$y <- dt[[input$data_type_selector]]
-          
-          # remove excluded
-          if (length(data$exclude) > 0) {
-            dt <- mutate(dt, 
-                         panel = ifelse(file %in% data$exclude, "Excluded", panel),
-                         size = ifelse(panel == "Excluded", median(size), size))
-          }
-          
-          # factor panel for right order
-          dt <- mutate(dt, panel.F = factor(panel, 
-                  levels = c("Lab ref", "Standard 1", "Standard 2", "Samples", "Excluded")))
-          
-          setProgress(0.5, "Constructing plot")      
-          p <- ggplot(dt, aes(analysis, y, fill = color, size = size)) + 
-            geom_point(shape = 21) + 
-            scale_x_continuous(breaks = seq(min(dt$analysis), max(dt$analysis), by = 4)) + 
-            scale_size_continuous(range = c(1,4)) +
-            theme_bw() + labs(x = "Analysis #", y = y_choices[[input$data_type_selector]], fill = "", size = "Area All [Vs]") + 
-            theme(text = element_text(size = 18), axis.text.x = element_text(angle = 60, hjust = 1),
-                  legend.position = "right", legend.direction = "vertical") +
-            facet_grid(panel.F~., scales = "free_y")
-          setProgress(0.8, "Rendering plot")
-          return(p)
-        })
+        # get N2O peaks
+        dt <- subset(isolate(get_data_table()), Start <= data$n2o_rt & End >= data$n2o_rt)
+        dt <- merge(dt, isolate(get_file_groups()), by = "file")
+        
+        if (nrow(dt) == 0) 
+          stop("No peaks found at this retention time. Please check where the N2O peaks are.")
+        
+        # determine grouping and analysis number
+        is_in_group <- function(group, groups) {
+          grepl(paste0("(", paste(groups, collapse = "|"), ")"), group)
+        }
+        
+        dt <- mutate(dt,
+                     analysis = as.numeric(sub("^MAT253(\\d+)_.*$", "\\1", file)),
+                     category = 
+                       ifelse(is_in_group(group, data$n2o), "Lab ref",
+                              ifelse(is_in_group(group, data$std1), "Standard 1",
+                                     ifelse(is_in_group(group, data$std2), "Standard 2",
+                                            "Samples"))),
+                     color = ifelse(category == "Samples", "Samples", name))
+        
+        # remove excluded
+        if (length(data$exclude) > 0) 
+          dt <- mutate(dt, category = ifelse(file %in% data$exclude, "Excluded", category))
+        
+        # factor category for right order
+        dt <- mutate(dt, category = factor(category, 
+                levels = c("Lab ref", "Standard 1", "Standard 2", "Samples", "Excluded")))
+        dt <- dt[with(dt, order(category, analysis)),]
+        
+        return(dt)
       })
+    } else 
+      return(data.frame())
+  })
+  
+  # make the overview plot
+  make_overview_plot <- reactive({
+    
+    withProgress(detail = "for data overview...", value = 0, {
+      setProgress(0.2, "Compiling data")
       
-    }
+      dt <- get_overview_data()
+      
+      if (nrow(dt) > 0) {
+        message("Plotting data overview")
+        dt <- mutate(dt, size = ifelse(category == "Excluded", median(`Intensity All`), `Intensity All`))
+        
+        # y choice (FIXME: abstract this out as "available data columns" and also use in the csv export!)
+        y_choices <- c(" 15N/14N" = "d15N [permil]", " 18O/16O" = "d18O [permil]", "Intensity All" = "Area All [Vs]")
+        dt$y <- dt[[input$data_type_selector]]
+        
+        setProgress(0.5, "Constructing plot")      
+        p <- ggplot(dt, aes(analysis, y, fill = color, size = size)) + 
+          geom_point(shape = 21) + 
+          scale_x_continuous(breaks = seq(min(dt$analysis), max(dt$analysis), by = 4)) + 
+          scale_size_continuous(range = c(1,4)) +
+          theme_bw() + labs(x = "Analysis #", y = y_choices[[input$data_type_selector]], fill = "", size = "Area All [Vs]") + 
+          theme(text = element_text(size = 18), axis.text.x = element_text(angle = 60, hjust = 1),
+                legend.position = "right", legend.direction = "vertical") +
+          facet_grid(category~., scales = "free_y")
+        setProgress(0.8, "Rendering plot")
+        return(p)
+      } else
+        plot.new()
+    })
   })
   output$data_overview_plot <- renderPlot(make_overview_plot())
   
@@ -374,6 +379,16 @@ shinyServer(function(input, output, session) {
     content = function(file) { 
       device <- function(..., version="1.4") grDevices::pdf(..., version=version)
       ggsave(file = file, plot = make_overview_plot(), width = 12, height = 8, device = device)
+    })
+  
+  output$data_csv_download <- downloadHandler(
+    filename = function() {paste0(basename(get_data_folder()), "_data.csv")}, 
+    content = function(file) { 
+      write.csv(
+        mutate(get_overview_data(),
+               `d15N [permil]` = ` 15N/14N`, `d18O [permil]` = ` 18O/16O`, `Area All [Vs]` = `Intensity All`)[
+                 c("category", "analysis", "name", "d15N [permil]", "d18O [permil]", "Area All [Vs]", "file")], 
+        file = file, row.names = FALSE)
     })
   
 #   # MORRIS chart (interactive rchart) - but is too slow

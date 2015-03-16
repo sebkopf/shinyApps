@@ -59,7 +59,8 @@ shinyUI(
             ),
             mainPanel(
               plotOutput("data_overview_plot", height="600px", width = "900px"),
-              downloadButton("data_overview_download", "Download", icon("save"))
+              downloadButton("data_overview_download", "Download Plot", icon("plot")),
+              downloadButton("data_csv_download", "Download Grouped Data", icon("save"))
             )
           )
         )
