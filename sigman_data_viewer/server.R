@@ -60,15 +60,14 @@ shinyServer(function(input, output, session) {
       return(list())
   })
   get_linearity_data_table <- reactive(get_isodat_data_tables(get_linearity_files()))
-  get_linearity_mass_traces <- reactive(get_isodat_mass_traces(get_linearity_files()))
-  
+
   # show linearity traces
   output$loaded_masses <- renderUI(make_trace_selector("selected_mass", get_linearity_files()))
   output$loaded_files <- renderUI(make_file_selector("selected_file", get_linearity_files(), selected = "linearity"))
   make_linearity_traces_plot <- reactive(
     if (is_linearity_loaded()) {
       withProgress(message = 'Rendering plot', detail = "for raw mass traces...", value = 0.5, 
-                   plot_masses(get_linearity_mass_traces(), input$selected_file, input$selected_mass))
+                   plot_masses(get_linearity_files(), input$selected_file, input$selected_mass))
     }
   )
   output$linearity_traces_plot <- renderPlot(make_linearity_traces_plot())
@@ -233,7 +232,6 @@ shinyServer(function(input, output, session) {
   # get specific aspects of these data files
   get_data_table <- reactive(get_isodat_data_tables(get_data_files()))
   get_file_groups <- reactive(get_data_file_groups(get_data_files()))
-  get_mass_traces <- reactive(get_isodat_mass_traces(get_data_files()))
   
   # show data traces
   output$data_loaded_masses <- renderUI(make_trace_selector("data_selected_mass", get_data_files()))
@@ -241,7 +239,7 @@ shinyServer(function(input, output, session) {
   make_data_traces_plot <- reactive(
     if (is_data_loaded()) {
       withProgress(message = 'Rendering plot', detail = "for raw mass traces...", value = 0.5, 
-                   plot_masses(get_mass_traces(), input$data_selected_file, input$data_selected_mass))
+                   plot_masses(get_data_files(), input$data_selected_file, input$data_selected_mass))
     }
   )
   output$data_traces_plot <- renderPlot(make_data_traces_plot())

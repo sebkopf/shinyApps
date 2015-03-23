@@ -1,6 +1,6 @@
 library(shiny)
 library(shinyFiles)
-library(rCharts)
+#library(rCharts)
 #options(RCHART_LIB = 'polycharts')
 
 # Define UI that plots the isotope label enrichment 
