@@ -23,7 +23,11 @@ load_isodat_files <- function(files, progress = NULL) {
 #' @param isodat_files isodat objects
 get_isodat_data_tables <- function(isodat_files, select = names(isodat_files[[1]]$get_data_table())) {
   do.call(rbind, lapply(isodat_files, function(i) {
-    mutate(i$get_data_table()[select], file = i$filename, date = i$creation_date)
+    mutate(i$get_data_table()[select], 
+           file = i$filename, 
+           date = i$creation_date,
+           analysis = as.numeric(sub("^MAT253(\\d+)_.*$", "\\1", file)),
+           run_number = order(date))
   }))
 }
 

@@ -13,17 +13,20 @@ linearity_base_plot <-
   scale_shape_manual (values = c(21, 22)) + 
   scale_fill_manual (values = brewer.pal(9, "Set1")[c(2,1)]) + 
   theme_bw() + theme(legend.position = "none", axis.title = element_text(size = 20)) +
-  labs(x = "Amplitude mass 44 [V]")
+  labs(x = "Amplitude mass 44 [V]") + facet_wrap(~analysis)
 
 #' generate cutoff slider
 make_cutoff_slider <- function(id, settings, min = 0, max = NULL) {
-  sliderInput(id, "", min = min, max = max, step = 1, value = settings[[id]], post = " V")
+  value <- as.numeric(settings[[id]])
+  if (value < min) value <- min
+  if (value > max) value <- max
+  sliderInput(id, "", min = min, max = max, step = 1, value = value, post = " V")
 }
 
 #' get plot data
 get_linearity_plot_data <- function(data, y) {
   mutate(
-    get_plot_data_table(data, "linearity", "Ampl 44", y),
+    get_plot_data_table(data, "[Ll]inearity", "Ampl 44", y),
     x = x/1000 # convert from V to mV
   )
 }
@@ -48,14 +51,18 @@ make_linearity_plot <- function(name, df, x_range) {
 
 #' get ON/OFF table
 get_on_off_table <- function(df, pattern = "ON OFF.dxf") { 
-  ddply(
-    subset(df, grepl(pattern, file)),
-    .(file),
-    summarise,
-    `ON/OFF File` = sub("^(MAT\\d+).*", "\\1", unique(file)),
-    `Std. Dev. d18O` = signif(sd(` 18O/16O`), 3),
-    `Std. Dev. d15N` = signif(sd(` 15N/14N`), 3)
-  )[-1]
+  on_off_table <- subset(df, grepl(pattern, file))
+  if (nrow(on_off_table) > 0)
+    ddply(
+     on_off_table,
+      .(file),
+      summarise,
+      `ON/OFF File` = sub("^(MAT\\d+).*", "\\1", unique(file)),
+      `Std. Dev. d18O` = signif(sd(` 18O/16O`), 3),
+      `Std. Dev. d15N` = signif(sd(` 15N/14N`), 3)
+    )[-1]
+  else
+    return(on_off_table)
 }
 
 #' make linearity summary
@@ -77,10 +84,14 @@ generate_linearity_summary <- function(
   pdf(file, width = width, height = height)
   grid.arrange(
     main= paste0("\nSummary for ON/OFF and linearity test for folder '", basename(folder), "'"),
-    tableGrob(on_off_table, 
-              gpar.coltext = gpar(fontsize=8, fontface="bold"),
-              gpar.coretext = gpar(fontsize=8),
-              show.rowname = FALSE), 
+    if (nrow(on_off_table) > 0)
+      tableGrob(on_off_table, 
+                gpar.coltext = gpar(fontsize=8, fontface="bold"),
+                gpar.coretext = gpar(fontsize=8),
+                show.rowname = FALSE)
+    else
+      textGrob("no ON/OFF data available")
+    , 
     plot_O + theme(axis.title = element_text(size = font_size)), 
     plot_N + theme(axis.title = element_text(size = font_size)),
     nrow=1, as.table=FALSE, 
@@ -94,12 +105,12 @@ generate_linearity_summary <- function(
   if (!is.null(summary_dir)) {
     summary <- data.frame(
       `Timestamp` = paste(Sys.time()),
-      `Run date & time` = paste(unique(subset(data_table, grepl("linearity", file))$date)),
+      `Run date & time` = paste(unique(subset(data_table, grepl("[Ll]inearity", file))$date)),
       `Folder` = basename(folder),
-      `Max ON/OFF Std. Dev. d18O` = max(on_off_table$`Std. Dev. d18O`),
-      `Min ON/OFF Std. Dev. d18O` = min(on_off_table$`Std. Dev. d18O`),
-      `Max ON/OFF Std. Dev. d15N` = max(on_off_table$`Std. Dev. d15N`),
-      `Min ON/OFF Std. Dev. d15N` = min(on_off_table$`Std. Dev. d15N`),
+      `Max ON/OFF Std. Dev. d18O` = if (nrow(on_off_table) > 0) max(on_off_table$`Std. Dev. d18O`) else NA,
+      `Min ON/OFF Std. Dev. d18O` = if (nrow(on_off_table) > 0) min(on_off_table$`Std. Dev. d18O`) else NA,
+      `Max ON/OFF Std. Dev. d15N` = if (nrow(on_off_table) > 0) max(on_off_table$`Std. Dev. d15N`) else NA,
+      `Min ON/OFF Std. Dev. d15N` = if (nrow(on_off_table) > 0) min(on_off_table$`Std. Dev. d15N`) else NA,
       `Linearity d18O slope [permil/V]` = reg_O$slope,
       `d18O R2` = reg_O$r2,
       `d18O Intensity range [min V]` = reg_O$x_min,

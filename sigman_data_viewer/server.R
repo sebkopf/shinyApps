@@ -38,7 +38,7 @@ shinyServer(function(input, output, session) {
   
   # LINEARITY ============
   shinyFileChoose(input, 'linearity_folder', session = session, roots=c(wd=data_dir),
-                  filetypes=c('NONEALLOWED'))
+                  filetypes=c('NOFILESELECTIONALLOWED'))
 
   # load data
   is_linearity_loaded <- reactive(!is.null(get_linearity_folder()))
@@ -59,7 +59,7 @@ shinyServer(function(input, output, session) {
     } else 
       return(list())
   })
-  get_linearity_data_table <- reactive(get_isodat_data_tables(get_linearity_files()))
+  get_linearity_data_table <- reactive(df <- get_isodat_data_tables(get_linearity_files()))
 
   # show linearity traces
   output$loaded_masses <- renderUI(make_trace_selector("selected_mass", get_linearity_files()))
@@ -71,6 +71,7 @@ shinyServer(function(input, output, session) {
     }
   )
   output$linearity_traces_plot <- renderPlot(make_linearity_traces_plot())
+  
   
   # linearity evaluation
   get_linearity_data_O <- reactive(get_linearity_plot_data(get_linearity_data_table(), " 18O/16O"))
@@ -96,7 +97,7 @@ shinyServer(function(input, output, session) {
   make_linearity_plot_N <- reactive(make_linearity_plot("d15N [permil]", get_linearity_data_N(), get_xrange_N()))
   output$linearity_plot_N <- renderPlot(if (is_linearity_loaded() && length(get_xrange_N()) > 0) isolate(print(make_linearity_plot_N())))
  
-  # summary
+  # summary for linearity and ON/OFFs
   output$summarize <- downloadHandler(
     filename = function() {paste0(basename(get_linearity_folder()), "_summary.pdf")}, 
     content = function(file) { 
@@ -267,13 +268,14 @@ shinyServer(function(input, output, session) {
       isolate({
         
         options <- setNames(sum_groups$group, sum_groups$label)
+        files <- setNames(groups$file, paste0(groups$file, " (#", groups$run_number, ")"))
         
         n2o <- isolate(data$n2o %||% grep(get_settings()$lab_ref, options, value = T))
         std1 <- isolate(data$std1 %||% grep(get_settings()$std1, options, value = T))
         std2 <- isolate(data$std2 %||% grep(get_settings()$std2, options, value = T))
         exclude <- isolate(data$exclude %||% grep(get_settings()$exclude, groups$file, value = T))
  
-        # MAYBE IMPLEMENT -- chrom load upon double click
+        # MAYBE IMPLEMENT -- chromatogram load upon double click (could be nice)
         # for how to implement, check: http://stackoverflow.com/questions/26208677/double-click-in-r-shiny
         
         # generate UI
@@ -285,7 +287,7 @@ shinyServer(function(input, output, session) {
           selectInput("std2_select", "Isotope standard #2", 
                       options, multiple=TRUE, selectize=FALSE, size = 3, selected = std2),
           selectInput("exclude_select", "Exclude from analysis", 
-                      groups$file, selected = exclude, multiple=TRUE, selectize=FALSE, size = 5)
+                      files, selected = exclude, multiple=TRUE, selectize=FALSE, size = 5)
         )
       })
     }
@@ -310,13 +312,12 @@ shinyServer(function(input, output, session) {
         if (nrow(dt) == 0) 
           stop("No peaks found at this retention time. Please check where the N2O peaks are.")
         
-        # determine grouping and analysis number
+        # determine grouping a
         is_in_group <- function(group, groups) {
           grepl(paste0("(", paste(groups, collapse = "|"), ")"), group)
         }
         
         dt <- mutate(dt,
-                     analysis = as.numeric(sub("^MAT253(\\d+)_.*$", "\\1", file)),
                      category = 
                        ifelse(is_in_group(group, data$n2o), "Lab ref",
                               ifelse(is_in_group(group, data$std1), "Standard 1",
@@ -331,7 +332,7 @@ shinyServer(function(input, output, session) {
         # factor category for right order
         dt <- mutate(dt, category = factor(category, 
                 levels = c("Lab ref", "Standard 1", "Standard 2", "Samples", "Excluded")))
-        dt <- dt[with(dt, order(category, analysis)),]
+        dt <- dt[with(dt, order(category, run_number)),]
         
         return(dt)
       })
@@ -356,11 +357,11 @@ shinyServer(function(input, output, session) {
         dt$y <- dt[[input$data_type_selector]]
         
         setProgress(0.5, "Constructing plot")      
-        p <- ggplot(dt, aes(analysis, y, fill = color, size = size)) + 
+        p <- ggplot(dt, aes(run_number, y, fill = color, size = size)) + 
           geom_point(shape = 21) + 
-          scale_x_continuous(breaks = seq(min(dt$analysis), max(dt$analysis), by = 4)) + 
+          scale_x_continuous(breaks = seq(min(dt$run_number), max(dt$run_number), by = 4)) + 
           scale_size_continuous(range = c(1,4)) +
-          theme_bw() + labs(x = "Analysis #", y = y_choices[[input$data_type_selector]], fill = "", size = "Area All [Vs]") + 
+          theme_bw() + labs(x = "Run #", y = y_choices[[input$data_type_selector]], fill = "", size = "Area All [Vs]") + 
           theme(text = element_text(size = 18), axis.text.x = element_text(angle = 60, hjust = 1),
                 legend.position = "right", legend.direction = "vertical") +
           facet_grid(category~., scales = "free_y")
@@ -384,8 +385,12 @@ shinyServer(function(input, output, session) {
     content = function(file) { 
       write.csv(
         mutate(get_overview_data(),
-               `d15N [permil]` = ` 15N/14N`, `d18O [permil]` = ` 18O/16O`, `Area All [Vs]` = `Intensity All`)[
-                 c("category", "analysis", "name", "d15N [permil]", "d18O [permil]", "Area All [Vs]", "file")], 
+               `d15N [permil]` = ` 15N/14N`, `d18O [permil]` = ` 18O/16O`, 
+               `Ampl 44 [mV]` = `Ampl 44`, `Area All [Vs]` = `Intensity All`)[
+                 c("category", "analysis", "run_number", "name", 
+                   "Ampl 44 [mV]", "Area All [Vs]",
+                   "d 45N2O/44N2O", "d 46N2O/44N2O",
+                   "d15N [permil]", "d18O [permil]", "file")], 
         file = file, row.names = FALSE)
     })
   
