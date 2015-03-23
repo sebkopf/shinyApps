@@ -271,7 +271,7 @@ shinyServer(function(input, output, session) {
         n2o <- isolate(data$n2o %||% grep(get_settings()$lab_ref, options, value = T))
         std1 <- isolate(data$std1 %||% grep(get_settings()$std1, options, value = T))
         std2 <- isolate(data$std2 %||% grep(get_settings()$std2, options, value = T))
-        exclude <- isolate(data$exclude %||% grep("(BLK|blank|BGD|Background|Conditioner)", groups$file, value = T))
+        exclude <- isolate(data$exclude %||% grep(get_settings()$exclude, groups$file, value = T))
  
         # MAYBE IMPLEMENT -- chrom load upon double click
         # for how to implement, check: http://stackoverflow.com/questions/26208677/double-click-in-r-shiny
