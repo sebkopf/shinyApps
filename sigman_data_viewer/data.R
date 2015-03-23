@@ -27,7 +27,7 @@ get_data_file_groups <- function (isodat_files) {
                           groups_trimmed, fixed = T)
   data.frame(
     file = files,
-    run_number = order(file),
+    run_number = order(files),
     name = groups_trimmed,
     group = sub("^([^ ]+) .*$", "\\1", groups_trimmed),
     stringsAsFactors = FALSE)

@@ -275,7 +275,7 @@ shinyServer(function(input, output, session) {
         std2 <- isolate(data$std2 %||% grep(get_settings()$std2, options, value = T))
         exclude <- isolate(data$exclude %||% grep(get_settings()$exclude, groups$file, value = T))
  
-        # MAYBE IMPLEMENT -- chromatogram load upon double click (could be nice)
+        # MAYBE IMPLEMENT -- chromatogram load upon double click
         # for how to implement, check: http://stackoverflow.com/questions/26208677/double-click-in-r-shiny
         
         # generate UI
@@ -328,6 +328,9 @@ shinyServer(function(input, output, session) {
         # remove excluded
         if (length(data$exclude) > 0) 
           dt <- mutate(dt, category = ifelse(file %in% data$exclude, "Excluded", category))
+        
+        #FIXME
+        message(names(dt))
         
         # factor category for right order
         dt <- mutate(dt, category = factor(category, 
