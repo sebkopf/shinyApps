@@ -15,3 +15,5 @@
 # Output files
 *.html
 */data/*.csv
+
+*.RDATA
