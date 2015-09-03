@@ -11,4 +11,4 @@ if (basename(getwd()) != folder) {
 
 require(shiny)
 require(methods)
-runApp(".", host = "0.0.0.0", port = 1234, launch.browser=TRUE)
+runApp(".", host = "0.0.0.0", port = 1235, launch.browser=TRUE)

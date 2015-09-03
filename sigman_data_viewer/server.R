@@ -390,7 +390,7 @@ shinyServer(function(input, output, session) {
         mutate(get_overview_data(),
                `d15N [permil]` = ` 15N/14N`, `d18O [permil]` = ` 18O/16O`, 
                `Ampl 44 [mV]` = `Ampl 44`, `Area All [Vs]` = `Intensity All`)[
-                 c("category", "analysis", "run_number", "name", 
+                 c("category", "analysis", "run_number", "name", "volume", 
                    "Ampl 44 [mV]", "Area All [Vs]",
                    "d 45N2O/44N2O", "d 46N2O/44N2O",
                    "d15N [permil]", "d18O [permil]", "file")], 
