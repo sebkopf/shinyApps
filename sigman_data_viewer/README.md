@@ -2,7 +2,13 @@
 
 The Sigman Data Viewer is a browser based Isodat run monitoring system built using the [Shiny](http://shiny.rstudio.com/) web application framework and the [Isoread](https://github.com/sebkopf/isoread#isoread) IRMS data interface R module. As a browser based application it is very easy to run on almost any system without the need for other types of graphical user interfaces and can automatically be hosted on an instrument machine for easy network access by users on the same network. It was specifically designed for instrument performance monitoring and on-the-fly data monitoring of big batch N2O isotope ratio measurements in the [Sigman lab](http://www.princeton.edu/sigman/) at Princeton, but could easily be adapted for similar analyses (e.g. traditional big batch EA-IRMS or gasbench-IRMS runs).
 
+### Linearity evaluation
+
+Linearity evaluation (loaded directly from raw Isodat file) and recording for historical evaluation.
+
+![Screenshot of the Linearity File Selection](/sigman_data_viewer/doc/linearity_selection.png?raw=true)
 ![Screenshot of the Linearity Evaluation](/sigman_data_viewer/doc/linearity_evaluation.png?raw=true)
+![Screenshot of the Linearity History](/sigman_data_viewer/doc/linearity_history.png?raw=true)
 
 ## Installation
 
