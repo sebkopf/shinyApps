@@ -1,0 +1,78 @@
+---
+title: "NOx isotope dynamics"
+output: html_document
+---
+
+```{r load-funcs, echo=FALSE, message=FALSE, warning=FALSE}
+source(file.path("libs","helpers.R"))
+
+packages <- c(
+  "knitr", # knitr package for rendering the markdown file
+  "readxl", # read/write excel files
+  "ggplot2", "scales", "grid", "gridExtra", "RColorBrewer", "latex2exp", # plotting, scale formatting, latex to plotmath and colour palettes
+  "magrittr", "reshape2", "plyr" # piping and data frame operations
+)
+load_pkgs(packages)
+
+# knitr options
+opts_knit$set(root.dir=".", cache = TRUE, autodep = TRUE)
+options(pdfsave.folder = "figures")
+```
+
+## Constants and initial values
+
+```{r params, savepdf=TRUE, fig.width = 8, fig.height = 6}
+params <- read_excel("nox_isotope_dynamics.xlsx")
+p <- ggplot(params, aes(latex, default)) + 
+  geom_errorbar(aes(ymin = min, ymax = max), width = 0.2) +
+  geom_point(shape = 21, size = 5, fill = "grey") + 
+  theme_bw() + theme_public() + theme(axis.text.x = element_text(angle=90, vjust = 0.5)) +
+  scale_x_discrete(labels=function(x) latex2exp(paste0("$",x,"$"))) +
+  labs(x="", y = "value")
+suppressWarnings(print(p))
+
+# parameter list (for easier quick access)
+plist <- subset(params) %>% dlply(.(id), identity)
+
+# initial variable data frame
+iframe <- subset(params, type %in% c("var", "inst", "const")) %>% mutate(i=0) %>% dcast(i~id, value.var = "default")
+```
+
+```{r}
+source("nox_isotope_processes.R")
+
+scenarios <- list(
+  #list(name = "Flux 1", args = list(D_conc = get_p("D1_conc"))),
+  #list(name = "Flux 2", args = list(D_conc = get_p("D2_conc"))),
+  #list(name = "Flux 3", args = list(D_conc = get_p("D3_conc")))
+  list(name = "Flux 1", args = list(D_conc = 0.4))
+)
+
+processes <- list(
+  list(name = "nitrate reduction", func = run_denitrification),
+  list(name = "nitrite reduction", func = run_nitrite_reduction),
+  list(name = "nitrite oxidation", func = run_nitrite_oxidation),
+  list(name = "ammonium oxidation", func = run_ammonium_oxidation),
+  list(name = "nitrate assimilation", func = run_nitrate_assimilation),
+  list(name = "ammonium assimilation", func = run_ammonium_assimilation),
+  list(name = "nitrogen fixation", func = run_nitrogen_fixation),
+  list(name = "nitrite water exchange", func = run_nitrite_water_exchange)
+)
+
+df <- run_processes(processes, scenarios, iframe, steps = 10)
+df.cross <- merge(df, df, by = c("process", "scenario", "i")) 
+
+xs <- c("c_NO3", "c_NO2", "c_Norg", "c_NH4") #"ln_f",  
+ys <- c("d15_NO2", "d15_NO3", "d18_NO2", "d18_NO3", "d15_Norg", "d15_NH4", 
+        "id15_NO2", "id15_NO3", "id18_NO2", "id18_NO3", "id15_Norg", "id15_NH4") #, "D_15_18", "D_dNOx")
+
+plot.df <- df.cross %>% 
+  subset(variable.x %in% xs & variable.y %in% ys) %>% 
+  ddply(.(process, scenario, variable.x, variable.y), mutate, 
+        undefined = all(is.na(value.x)) || all(is.na(value.y)),
+        unchanged = identical(value.x[2], value.x[max(i)]) & identical(value.y[2], value.y[max(i)])) %>%
+  subset(!undefined & !unchanged) # don't display arrows for unchanged values (compare to i=2 b/c w/o starting value, NA@1)
+  
+plot.df %>% subset(scenario == "Flux 1") %>% plot_in_grid() 
+#plot.df %>% subset(scenario == "Flux 1") %>% plot_in_wrap() # FIXME, doesn't work if there are panels wth no data at all
+```

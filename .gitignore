@@ -1,6 +1,7 @@
 # History files
 .Rhistory
 .RData
+.Rapp.history
 *.Rproj
 
 # Example code in package build process
@@ -11,6 +12,7 @@
 *.dxf
 *.pdf
 *.xls
+~*.xlsx
 
 # Output files
 *.html
