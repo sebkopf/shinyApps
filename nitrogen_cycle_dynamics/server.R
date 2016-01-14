@@ -2,10 +2,13 @@ library(shiny)
 library(readxl)
 library(ggplot2)
 library(scales)
+library(grid)
 library(gridExtra)
 library(RColorBrewer)
 library(latex2exp)
-library(dplyr)
+library(magrittr)
+library(plyr)
+library(reshape2)
 
 # PARAMETERS and PROCESSES =======
 params <<- read_excel("nox_isotope_dynamics.xlsx", sheet = "variables")
@@ -69,6 +72,8 @@ server <- function(input, output) {
     
     plot.df %>% subset(scenario == "Flux 1") %>% return()
   })
+
+  
   
   
   # main plot
@@ -84,13 +89,18 @@ server <- function(input, output) {
         p <- .base_plot 
         if (isolate(input$legend) == "below")
           p <- p + theme(legend.position = "bottom") + guides(color = guide_legend(ncol=2,byrow=FALSE)) 
-        if (isolate(input$layout) == "wrap")
-          data[order(data$i),] %>% plot_in_wrap(plot = p) %>% return()
-        else
-          data[order(data$i),] %>% plot_in_grid(plot = p) %>% return() 
+        
+        #if (isolate(input$layout) == "wrap")
+        #  data[order(data$i),] %>% plot_in_wrap(plot = p) %>% return()
+        #else
+        data[order(data$i),] %>% plot_in_grid(plot = p) %>% return() 
       }
     })
   )
+  
+  
+  
+  
   
   # rendering plot
   output$main_plot <- renderPlot(

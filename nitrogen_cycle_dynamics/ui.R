@@ -2,7 +2,8 @@ library(shiny)
 library(shinydashboard)
 library(shinyBS)
 library(readxl)
-library(dplyr)
+library(magrittr)
+library(plyr)
 
 # read parameters for axis options
 params <- read_excel("nox_isotope_dynamics.xlsx", sheet = "variables")
@@ -10,7 +11,7 @@ axis_options <- with(
   params %>% subset(type %in% c("var", "inst")) %>% 
    transform(latex = paste0("\\(", gsub("\\\\\\\\","\\\\", latex),"\\)")), 
   setNames(id, latex))
-value_inputs <- params %>% subset(adjustable == "yes") %>% select(id, name, unit, min, max, default) %>% 
+value_inputs <- params %>% subset(adjustable == "yes", select = c("id", "name", "unit", "min", "max", "default")) %>% 
   t() %>% as.data.frame(stringsAsFactors=FALSE) %>% as.list() %>% 
   lapply(function(i) numericInput(paste0("value_", i[1]), paste0(i[2], " [", i[3], "]"), value = as.numeric(i[6])))
 
@@ -60,8 +61,8 @@ body <- dashboardBody(
                      tags$input(id = "model_steps", type = "number", value = 15, min = 5, step = 5, class = "form-control")),
                  div(style="display:inline-block;",tags$label("steps"))
                ),
-               radioButtons("legend", "Legend Position", c("Right" = "right", "Below" = "below"), selected = "right", inline = TRUE),
-               radioButtons("layout", "Layout", c("Grid" = "grid", "Panels" = "wrap"), selected = "grid", inline = TRUE)
+               radioButtons("legend", "Legend Position", c("Right" = "right", "Below" = "below"), selected = "right", inline = TRUE)
+               #radioButtons("layout", "Layout", c("Grid" = "grid", "Panels" = "wrap"), selected = "grid", inline = TRUE)
            ),
            
            # default values
@@ -91,6 +92,14 @@ body <- dashboardBody(
            
     )
     
+  ),
+  
+  fluidRow(
+    column(12, "The source code for this application is available on ",
+           a(href="https://www.github.com/sebkopf/shinyApps/tree/master/nitrogen_cycle_dynamics", "GitHub"), "."),
+    column(12, "Please use the repository's",
+           a(href="https://github.com/sebkopf/shinyApps/issues", "Issue Tracker"),
+           "for any feedback, suggestions and bug reports.")
   )
 )
 

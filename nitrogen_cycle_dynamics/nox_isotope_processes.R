@@ -1,4 +1,22 @@
+#### Utilities ####
+
+#' NaN / NA default
+#' @param x = vector
+#' @param c = constant substituting for NaN values
+"%|%" <- function(x, c = 0) {
+  ifelse(is.nan(x) | is.na(x), c, x)
+}
+
+
 #### Plotting ####
+
+theme_nogrid <- function() theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+theme_nolegend <- function() theme(legend.position = "none") 
+theme_xangle <- function(angle = 60) theme(axis.text.x = element_text(angle=angle, hjust = 1))
+theme_nobgrd <- function() theme(plot.background = element_blank(), panel.background = element_blank())
+theme_frame <- function() theme(panel.border = element_rect(color="black", size=1), strip.background = element_rect(color="black", linetype = 1))
+theme_nomargins <- function() theme(plot.margin = unit(c(0, 0, 0, 0), "cm"))
+theme_public <- function(font_size = 18) theme_nobgrd() + theme_frame() + theme(text = element_text(size = font_size))
 
 .base_plot <- 
   ggplot() + 
@@ -8,25 +26,40 @@
   labs(x="", y="", color = "") 
 
 add_arrows <- function (df) {
+  arrow_df <- df %>% 
+    ddply(.(process, scenario, variable.x, variable.y), mutate,
+          max_i = max(i[!is.na(value.x) & !is.na(value.y)]))
   arrow_df <- merge(
-    df %>% subset(i == max(i) - 1), 
-    (df %>% subset(i == max(i)) %>% mutate(xend = value.x, yend = value.y))
+    arrow_df %>% subset(i == max_i - 1), 
+    (arrow_df %>% subset(i == max_i) %>% mutate(xend = value.x, yend = value.y))
     [c("process", "scenario", "variable.x", "variable.y", "xend", "yend")])  
   
   geom_segment(data = arrow_df, aes(xend = xend, yend = yend), size = 2,
                arrow = arrow(length = unit(0.5, "cm"), type = "open")) 
 }
 
+label_latex <- function(labels, multi_line = FALSE) {
+  labels <- lapply(labels, as.character)
+  if (multi_line) {
+    stop("not implemented") # implement?
+  } else {
+    lapply(labels[[1]], function(value) {
+      value <- paste0("$", get_p(as.character(value), "latex"), "$")
+      TeX(value)
+    }) %>% list()
+  }
+}
+class(label_latex) <- c("function", "labeller")
+
 plot_in_grid <- function(df, plot = .base_plot) {
+  
   plot %+% subset(df, i < max(i)) + add_arrows(df) + 
-    facet_grid(variable.y ~ variable.x, scales = "free", labeller = function(var, val) {
-      return(sapply(val, function(i) {
-        latex2exp(paste0("$", get_p(as.character(i), "latex"), "$"))
-      }))
-    })
+    facet_grid(variable.y ~ variable.x, scales = "free", switch = "both", labeller = label_latex) + 
+    theme(strip.background = element_blank())
 }
 
 plot_in_wrap <- function(df, plot = .base_plot) {
+  stop("this is not implemented yet with the labeller for the new ggplot2 v. 2.0")
   p <- plot %+% subset(df, i < max(i)) + add_arrows(df) + 
     facet_wrap(~ variable.y + variable.x, nrow = length(df$variable.y %>% as.character() %>% unique()), scales = "free") 
   
@@ -54,7 +87,8 @@ max_substrate_check <- function(init, D_conc, substrate_ID, substrate = sub("^c_
   if (D_conc > init[1, substrate_ID]) {
     D_conc <- init[1, substrate_ID]
     message("WARNING: Trying to remove more ", substrate, 
-            " than available. Max removal flux adjusted to total ", substrate, ".")
+            " than available. Max removal flux adjusted to total ", substrate, " (",
+            D_conc, ").")
   }
   return(D_conc)
 }
