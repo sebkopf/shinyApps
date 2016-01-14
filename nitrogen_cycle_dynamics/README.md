@@ -6,8 +6,9 @@ This shiny app is a visual tool to explore the isotope dynamics of the nitrogen 
 To run the shiny app locally you need to install the following packages (ggplot2 version 2.0 or better is required):
 
 ```coffee
-packages <- c("shiny", "shinydashboard", "shinyBS", "readxl", 
-              "magrittr", "plyr", "reshape2", "ggplot2", "scales", "gridExtra", "RColorBrewer",
+packages <- c("shiny", "shinydashboard", "shinyBS", 
+              "readxl", "magrittr", "plyr", "reshape2", 
+              "ggplot2", "scales", "gridExtra", "RColorBrewer",
               "latex2exp")
 install.packages(packages)
 ```
