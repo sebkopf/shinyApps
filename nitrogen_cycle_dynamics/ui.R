@@ -128,11 +128,6 @@ body <- dashboardBody(
                  column(6, withMathJax(DT::dataTableOutput('axis_x')))
                )
            ),
-  
-           # values
-           box(title = "Parameters", solidHeader = TRUE, collapsible = TRUE, status = "danger", collapsed = TRUE, width = 12,
-               numericInput("mass_flux", "Mass flux [meq/L]:", 1.0),
-               value_inputs),
            
            # somehow required for proper mathjax rendering in the data tables
            shinyjs::hidden(div(id = "test",checkboxGroupInput("axis_hidden", "hidden", axis_options)))
