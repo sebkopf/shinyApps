@@ -45,7 +45,7 @@ body <- dashboardBody(
              div(align = "right", 
                  actionLink("refresh", "Refresh", icon = icon("gear"), style = "padding-right:1em; padding-left:1em;"), 
                  bsTooltip("refresh", "Refresh the plot"),
-                 actionLink("download", "Save", icon = icon("download")),
+                 actionLink("download", "Save plot", icon = icon("download")),
                  bsTooltip("download", "Download the plot as a PDF")
              ),
              status = "primary", solidHeader = TRUE, width = 12,
@@ -100,7 +100,7 @@ body <- dashboardBody(
 #            ),
            
            # plot settings box
-           box(title = "Display", solidHeader = TRUE, collapsible = TRUE, status = "danger", collapsed = TRUE, width = 12,
+           box(title = "Settings", solidHeader = TRUE, collapsible = TRUE, status = "danger", collapsed = TRUE, width = 12,
                div( style = "",
                  div(style="display:inline-block;",tags$label("Height:")),
                  div(style="display:inline-block; width: 60px;",
