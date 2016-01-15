@@ -127,8 +127,7 @@ server <- function(input, output, session) {
   
   # save entry
   observe({
-    input$editbox_submit # trigger with this
-    if (input$editbox_submit == 0) return()
+    if (is.na(input$editbox_value)) return()
     isolate({
       # update data here
       data$values[input$parameters_rows_selected,"value"] <- input$editbox_value

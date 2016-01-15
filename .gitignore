@@ -4,6 +4,9 @@
 .Rapp.history
 *.Rproj
 
+# Deployment
+*.dcf
+
 # Example code in package build process
 *-Ex.R
 .Rproj.user

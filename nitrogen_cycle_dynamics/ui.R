@@ -67,8 +67,8 @@ body <- dashboardBody(
                          br(),
                          h3("Edit parameter"),
                          h4(textOutput("editbox_name")),
-                         numericInput("editbox_value", label = "", value = ""),
-                         h4(actionLink("editbox_submit", " Change value", icon = icon("save"))))
+                         numericInput("editbox_value", label = "", value = "")
+                     )
                    )
                  ) %>% column(width = 2)
                )
