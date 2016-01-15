@@ -1,6 +1,8 @@
 library(shiny)
 library(shinydashboard)
 library(shinyBS)
+library(shinyjs)
+library(DT)
 library(readxl)
 library(magrittr)
 library(plyr)
@@ -24,6 +26,8 @@ sidebar <- dashboardSidebar(disable = TRUE)
 
 body <- dashboardBody(
   
+  shinyjs::useShinyjs(),
+  
   bsModal("save_dialog", "Save plot", "download", size = "small",
           textInput("save_name", "Filename:", "ncycle_arrow_plot.pdf"),
           numericInput("save_width", "Width [inches]:", 12),
@@ -31,28 +35,76 @@ body <- dashboardBody(
           downloadButton("save", "Save", icon("save"))
   ),
   
+  
   fluidRow(
   
-    # plot box
-    box(
-      div(align = "right", 
-        actionLink("refresh", "Refresh", icon = icon("gear"), style = "padding-right:1em; padding-left:1em;"), 
-        bsTooltip("refresh", "Refresh the plot"),
-        actionLink("download", "Save", icon = icon("download")),
-        bsTooltip("download", "Download the plot as a PDF")
-      ),
-      status = "primary", solidHeader = TRUE, width = 9,
-      plotOutput("main_plot", height = "100%"),
-      br()
+    column(width = 9, 
+           
+           # plot box
+           box(
+             div(align = "right", 
+                 actionLink("refresh", "Refresh", icon = icon("gear"), style = "padding-right:1em; padding-left:1em;"), 
+                 bsTooltip("refresh", "Refresh the plot"),
+                 actionLink("download", "Save", icon = icon("download")),
+                 bsTooltip("download", "Download the plot as a PDF")
+             ),
+             status = "primary", solidHeader = TRUE, width = 12,
+             plotOutput("main_plot", height = "100%"),
+             br()
+           ),
+           
+           # parameter box
+           box(title = "Parameters", solidHeader = TRUE, collapsible = TRUE, status = "success", collapsed = FALSE, width = 12,
+               div(align = "right", 
+                   actionLink("refresh2", "Refresh", icon = icon("gear"), style = "padding-right:1em; padding-left:1em;"), 
+                   bsTooltip("refresh2", "Refresh the plot")
+               ),
+               fluidRow(
+                 withMathJax(DT::dataTableOutput('parameters')) %>% column(width = 9),
+                 fluidRow(
+                   shinyjs::hidden(
+                     div(id = "editbox_div",
+                         br(),
+                         h3("Edit parameter"),
+                         h4(textOutput("editbox_name")),
+                         numericInput("editbox_value", label = "", value = ""),
+                         h4(actionLink("editbox_submit", " Change value", icon = icon("save"))))
+                   )
+                 ) %>% column(width = 2)
+               )
+           ),
+           
+           fluidRow(
+             column(12, "Written by ", a(href="mailto:skopf@princeton.edu", "Sebastian Kopf"), 
+                    " and powered by ", a(href="http://www.rstudio.com/", "RStudio"), "'s ", 
+                    a(href="http://www.rstudio.com/shiny/", "Shiny engine"), "."),
+             column(12, "The source code for this application is released under ", 
+                    a(href="http://www.gnu.org/licenses/gpl-3.0.html", "GPL-3")," and is available on ",
+                    a(href="https://www.github.com/sebkopf/shinyApps/tree/master/nitrogen_cycle_dynamics", "GitHub"), "."),
+             column(12, "Please use the repository's",
+                    a(href="https://github.com/sebkopf/shinyApps/issues", "Issue Tracker"),
+                    "for any feedback, suggestions and bug reports.")
+           )
     ),
     
     column(width = 3,
+           
+           # for parameter edit on the side bar
+#            shinyjs::hidden(
+#              div(id = "editbox_div", 
+#                  box(title = "Parameter", solidHeader = TRUE, collapsible = TRUE, status = "success", collapsed = FALSE, width = 12,
+#                      h4(textOutput("editbox_name")),
+#                      numericInput("editbox_value", label = "", value = ""),
+#                      h4(actionLink("editbox_submit", " Change value", icon = icon("save")))
+#                  ))
+#            ),
+           
            # plot settings box
-           box(title = "Settings", solidHeader = TRUE, collapsible = TRUE, status = "success", collapsed = TRUE, width = 12,
+           box(title = "Display", solidHeader = TRUE, collapsible = TRUE, status = "danger", collapsed = TRUE, width = 12,
                div( style = "",
                  div(style="display:inline-block;",tags$label("Height:")),
                  div(style="display:inline-block; width: 60px;",
-                     tags$input(id = "main_plot_height", type = "number", value = 400, min = 100, step = 50, class = "form-control")),
+                     tags$input(id = "main_plot_height", type = "number", value = 500, min = 100, step = 50, class = "form-control")),
                  div(style="display:inline-block;",tags$label("px"))
                ),
                div(style = "",
@@ -66,41 +118,29 @@ body <- dashboardBody(
            ),
            
            # default values
-           box(title = "Processes", solidHeader = TRUE, collapsible = TRUE, status = "primary", collapsed = TRUE, width = 12,
-               checkboxGroupInput("procs", "Processes:", procs$name, selected = procs$name)),
+           box(title = "Processes", solidHeader = TRUE, collapsible = TRUE, status = "primary", collapsed = FALSE, width = 12,
+               DT::dataTableOutput('processes')),
            
+           # axes
+           box(title = "Axes", solidHeader = TRUE, collapsible = TRUE, status = "warning", collapsed = FALSE, width = 12,
+               fluidRow(
+                 column(6, withMathJax(DT::dataTableOutput('axis_y'))),
+                 column(6, withMathJax(DT::dataTableOutput('axis_x')))
+               )
+           ),
+  
            # values
            box(title = "Parameters", solidHeader = TRUE, collapsible = TRUE, status = "danger", collapsed = TRUE, width = 12,
                numericInput("mass_flux", "Mass flux [meq/L]:", 1.0),
                value_inputs),
-
-           # axes
-           box(title = "Display", solidHeader = TRUE, collapsible = TRUE, status = "warning", collapsed = FALSE, width = 12,
-               withMathJax(),
-               fluidRow(
-                 column(width = 5,
-                        checkboxGroupInput("y_axis", "Y-axis:",
-                                           axis_options)
-                 ),
-                 column(width = 5,
-                        checkboxGroupInput("x_axis", "X-axis:",
-                                           axis_options)
-                 )
-               ) 
-           )
-  
+           
+           # somehow required for proper mathjax rendering in the data tables
+           shinyjs::hidden(div(id = "test",checkboxGroupInput("axis_hidden", "hidden", axis_options)))
            
     )
     
-  ),
-  
-  fluidRow(
-    column(12, "The source code for this application is available on ",
-           a(href="https://www.github.com/sebkopf/shinyApps/tree/master/nitrogen_cycle_dynamics", "GitHub"), "."),
-    column(12, "Please use the repository's",
-           a(href="https://github.com/sebkopf/shinyApps/issues", "Issue Tracker"),
-           "for any feedback, suggestions and bug reports.")
   )
+  
 )
 
 dashboardPage(header, sidebar, body)

@@ -1,4 +1,5 @@
 library(shiny)
+library(DT)
 library(readxl)
 library(ggplot2)
 library(scales)
@@ -11,7 +12,8 @@ library(plyr)
 library(reshape2)
 
 # PARAMETERS and PROCESSES =======
-params <<- read_excel("nox_isotope_dynamics.xlsx", sheet = "variables")
+params <<- read_excel("nox_isotope_dynamics.xlsx", sheet = "variables") %>% 
+  mutate(mjax_latex = paste0("\\(", gsub("\\\\\\\\","\\\\", latex),"\\)"))
 value_ids <- (params %>% subset(adjustable == "yes"))$id
 plist <<- subset(params) %>% dlply(.(id), identity)
 iframe <<- subset(params, type %in% c("var", "inst", "const")) %>% mutate(i=0) %>% dcast(i~id, value.var = "default")
@@ -24,32 +26,31 @@ source("nox_isotope_processes.R") # source this
 # there is a bug when increasing the number of steps to 15 and plotting things against each other (e.g. D(15,18) vs. [NO3])
 # path doesn't seem to be in right order --> make sure to fix that
 
-server <- function(input, output) {
+server <- function(input, output, session) {
 
   # get model output
   get_model_data <- reactive({
     input$refresh # refresh pressed
+    input$refresh2
     
-    values <- isolate(sapply(value_ids, function(var) input[[paste0("value_", var)]]))
+    values <- isolate(data$values[c("id", "value")])
     
-    print(values)
-    
+    # FIXME: maybe scenarios is obsolete?
     scenarios <- list(
-      #list(name = "Flux 1", args = list(D_conc = get_p("D1_conc"))),
-      #list(name = "Flux 2", args = list(D_conc = get_p("D2_conc"))),
-      #list(name = "Flux 3", args = list(D_conc = get_p("D3_conc")))
-      list(name = "Flux 1", args = list(D_conc = as.numeric(isolate(input$mass_flux))))
+      list(name = "Flux 1", args = list(D_conc = subset(values, id == "mass_flux")$value))
     )
     
-    for (name in names(values)) {
-      if (name %in% names(iframe) && !is.null(values[name])) {
-        iframe[1,name] <- values[name]
+    # FIXME: there might be a more elegant way to do this?
+    for (i in 1:nrow(values)) {
+      if (values$id[i] %in% names(iframe) && !is.null(values$value[i])) {
+          iframe[1,values$id[i]] <- values$value[i]
       }
     }
     
-    df <- run_processes(
-      procs %>% subset(name %in% isolate(input$procs)), 
-      scenarios, iframe, steps = isolate(input$model_steps))
+    procs <- data$processes[isolate(input$processes_rows_selected),]
+    if (nrow(procs) == 0) return(NULL)
+    
+    df <- run_processes(procs, scenarios, iframe, steps = isolate(input$model_steps))
     df.cross <- merge(df, df, by = c("process", "scenario", "i")) 
     return(df.cross)
   })
@@ -59,9 +60,9 @@ server <- function(input, output) {
     df.cross <- get_model_data()
     if (is.null(df.cross)) return (NULL)
 
-    xs <- isolate(input$x_axis)
-    ys <- isolate(input$y_axis)
-    if (is.null(xs) || is.null(ys) || is.null(procs)) return(NULL)
+    xs <- isolate(data$axes[input$axis_x_rows_selected, "id"])
+    ys <- isolate(data$axes[input$axis_y_rows_selected, "id"])
+    if (length(xs) == 0 || length(ys) == 0 || is.null(procs)) return(NULL)
 
     plot.df <- df.cross %>% 
       subset(variable.x %in% xs & variable.y %in% ys) %>% 
@@ -73,9 +74,6 @@ server <- function(input, output) {
     plot.df %>% subset(scenario == "Flux 1") %>% return()
   })
 
-  
-  
-  
   # main plot
   make_main_plot <- reactive(
     withProgress(message = 'Rendering plot...', value = 0.2, {
@@ -99,13 +97,86 @@ server <- function(input, output) {
   )
   
   
+  ### parameters ###
+  data <- reactiveValues(
+    values = params %>% subset(adjustable == "yes") %>% mutate(parameter = mjax_latex, description = name, value = default),
+    processes = procs,
+    axes = params %>% subset(type %in% c("var", "inst"))
+  )
   
+  # edit entry
+  output$editbox_name <- renderText({
+    if (length(input$parameters_rows_selected) > 0) {
+      paste0(
+        data$values[input$parameters_rows_selected,"description"], " [",
+        data$values[input$parameters_rows_selected,"unit"], "]:")
+    } else {
+      return("")
+    }
+  })
   
+  # hide/show edit box
+  observe({
+    if (length(input$parameters_rows_selected) > 0)  {
+      updateTextInput(session, "editbox_value", 
+                      value = data$values[input$parameters_rows_selected,"value"])
+      shinyjs::show("editbox_div")
+    } else
+      shinyjs::hide("editbox_div")
+  })
+  
+  # save entry
+  observe({
+    input$editbox_submit # trigger with this
+    if (input$editbox_submit == 0) return()
+    isolate({
+      # update data here
+      data$values[input$parameters_rows_selected,"value"] <- input$editbox_value
+      # update display data.table
+      shinyjs::runjs(
+        paste0(
+          "var table = $('#DataTables_Table_0').DataTable();",
+          "table.cell('.selected', 3).data(", input$editbox_value, ").draw();")
+      )
+    })
+  })
+  
+  # parameter table
+  output$parameters <- DT::renderDataTable({
+    datatable(isolate(data$values[c("parameter", "type", "description", "value", "unit")]), 
+              rownames = FALSE, filter = 'none',  class = 'cell-border stripe', selection = "single", escape = FALSE,
+              #extensions = 'TableTools',
+              options = list(pageLength = isolate(nrow(data$values)), autoWidth = TRUE, searchHighlight = TRUE, dom = 'frt') 
+              #               tableTools = list(sSwfPath = copySWF()), # doesn't fully work but look into it again
+              )
+  }, server = FALSE)
+  
+  # processes
+  output$processes <- DT::renderDataTable({
+    datatable(data$processes[,"name", drop=FALSE], 
+              rownames = FALSE, filter = 'none',  selection = "multiple",
+              options = list(pageLength = nrow(data$processes), autoWidth = TRUE, dom = "t", ordering = FALSE)
+    )
+  }, server = FALSE)
+  
+  # axes
+  output$axis_x <- DT::renderDataTable({
+    datatable( mutate(data$axes, `X-axis` = mjax_latex)[, "X-axis", drop = FALSE], 
+              rownames = FALSE, filter = 'none',  selection = "multiple", escape = FALSE,
+              options = list(pageLength = nrow(data$axes), autoWidth = TRUE, dom = "t", ordering = FALSE)
+    )
+  }, server = FALSE)
+  output$axis_y <- DT::renderDataTable({
+    datatable( mutate(data$axes, `Y-axis` = mjax_latex)[, "Y-axis", drop = FALSE], 
+               rownames = FALSE, filter = 'none',  selection = "multiple", escape = FALSE,
+               options = list(pageLength = nrow(data$axes), autoWidth = TRUE, dom = "t", ordering = FALSE)
+    )
+  }, server = FALSE)
   
   # rendering plot
   output$main_plot <- renderPlot(
     make_main_plot(), 
-    height = reactive({input$refresh; isolate(input$main_plot_height)})) # trigger also only on refresh
+    height = reactive({input$refresh; input$refresh2; isolate(input$main_plot_height)})) # trigger also only on refresh
   
   # download handler
   output$save <- downloadHandler(
