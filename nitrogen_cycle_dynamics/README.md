@@ -3,7 +3,7 @@
 This shiny app is a visual tool to explore the isotope dynamics of the nitrogen cycle. Its goal is to make the different processes more accessible and help students gain a more intuitive understanding of how they change the ocean's nitrogen reservoirs. All plots can be saved as PDF and can of course be used freely, especially for educational purposes. The application is released as open software under the GNU General Public License 3.0. 
 
 ### Run online
-An online version is available [here](https://sebkopf.shinyapps.io/nitrogen_cycle_dynamics/) and should run from any javascript enabled browser without installing anything extra (but is not necessarily always the most up to date version although I will try to keep it current).
+An online version is available [here](https://sebkopf.shinyapps.io/nitrogen_cycle_dynamics/) and should run from any javascript enabled browser without installing anything extra (but is not necessarily always the most up to date version although I will try to keep it current). Unfortunately, MathJax (the rendering of latex equations) doesn't always seem to work in the online version. Running locally is recommended if feasible.
 
 ### Run locally
 To run the shiny app locally you need to install the following packages (ggplot2 version 2.0 or better is required):
