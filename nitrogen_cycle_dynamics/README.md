@@ -6,7 +6,7 @@ This shiny app is a visual tool to explore the isotope dynamics of the nitrogen 
 An online version is available [here](https://sebkopf.shinyapps.io/nitrogen_cycle_dynamics/) and should run from any javascript enabled browser without installing anything extra (but is not necessarily always the most up to date version although I will try to keep it current). Unfortunately, MathJax (the rendering of latex equations) doesn't always seem to work in the online version. Running locally is recommended if feasible.
 
 ### Run locally
-To run the shiny app locally you need to install the following packages (ggplot2 version 2.0 or better is required):
+To run the shiny app locally you need to [install R](https://cran.rstudio.com/bin/) and optionally (but highly recommend) the development interface [R-Studio](http://www.rstudio.com/products/rstudio/download/), then launch R or R-Studio and install the following packages (ggplot2 version 2.0 or better is required) from the command line:
 
 ```coffee
 packages <- c("shiny", "shinydashboard", "shinyBS", "shinyjs", "DT",
