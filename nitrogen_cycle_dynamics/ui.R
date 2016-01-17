@@ -6,6 +6,7 @@ library(DT)
 library(readxl)
 library(magrittr)
 library(plyr)
+library(knitr)
 
 # read parameters for axis options
 params <- read_excel("nox_isotope_dynamics.xlsx", sheet = "variables")

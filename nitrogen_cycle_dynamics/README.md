@@ -12,7 +12,7 @@ To run the shiny app locally you need to [install R](https://cran.rstudio.com/bi
 packages <- c("shiny", "shinydashboard", "shinyBS", "shinyjs", "DT",
               "readxl", "magrittr", "plyr", "reshape2", 
               "ggplot2", "scales", "gridExtra", "RColorBrewer",
-              "latex2exp")
+              "latex2exp", "knitr")
 install.packages(packages)
 ```
 

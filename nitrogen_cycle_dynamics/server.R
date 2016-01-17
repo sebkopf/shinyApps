@@ -10,6 +10,7 @@ library(latex2exp)
 library(magrittr)
 library(plyr)
 library(reshape2)
+library(knitr)
 
 # PARAMETERS and PROCESSES =======
 params <<- read_excel("nox_isotope_dynamics.xlsx", sheet = "variables") %>% 
