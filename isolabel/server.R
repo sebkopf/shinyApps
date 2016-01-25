@@ -8,68 +8,7 @@ library(plyr)
 library(reshape2)
 library(RColorBrewer)
 
-#' Isotopia options
-set_iso_opts(
-    default_delta_notation = "permil",
-    default_ab_notation = "raw"
-)
-
-
-#' Duration labels to the closest large denominator (e.g. 86400s = ~24 hours)
-#'@param ds vector of lubridate:::duration objects or time in seconds
-duration_label <- function(ds) {
-    sapply(ds, function(x) { 
-        if (grepl("^[0-9\\.]+s$", (d <- duration(x, "seconds")))) return(paste0('~', round(as.numeric(d), 1), " seconds"))
-        else return(str_extract(d, "~.[^\\)]*"))
-    })
-}
-
-#' Labeling time as function of doubling time, desired isotopic enrichment and strength of label
-#' 
-#' Formula: label_time = dblt / log(2) * log [(F_spike - F_natural) / (F_spike - F_target)]
-#' 
-#' @param dblt doubling times - a vector of lubridate:::duration objects
-#' @param target enrichment - an isotope value object (usually abundance or delta value) 
-#' @param spike - strength of label, another isotope value object (usually abundance but delta value works too)
-#' @param natural - natural abundance (ratio or abundance)
-#' @return data frame with input columns and additional columns target.ab, spike.ab (the abundance objects) and labeling_time
-#' @note the conversion to an abundance value if coming from delta target or spike requires
-#' the delta values to have their ref_ratio set (or the standard registered) and is only 100%
-#' accurate in 2 isotope systems (othewise some error introduced when converting ratio to abundance
-#' without taking the other minor isotopes into consideration)
-label_time <- function(dblt, target, spike, natural) {
-    df <- expand.grid(dblt = dblt, target = target, spike = spike, natural = natural, stringsAsFactors = FALSE)
-    df <- mutate(df, 
-           dblt.label = duration_label(dblt), # add labels
-           target.ab = to_ab(target), # convert to abundance 
-           spike.ab = to_ab(spike), # convert to abundance
-           natural.ab = to_ab(natural), # convert to abundance
-           labeling_time = as.numeric(dblt)/log(2) * 
-               log((get_value(spike.ab) - get_value(natural.ab)) / (get_value(spike.ab) - get_value(target.ab))), # calculate label time
-           labeling_time.label = duration_label(labeling_time)) # label
-    df
-}
-
-#' Isotopic enrichment as a function of labeling time, doubling time and strength of label
-#' 
-#' Formula: total = F_natural * exp(-p t) + F_spike * (1 - exp(-p t))
-#' 
-#' @param time labeling times, a vector of lubridate:::duration objects
-#' @param dblt doubling times, a vector of lubridate:::duration objects
-#' @param spike - strength of label, isotope value object (usually abundance but delta value works too)
-#' @param natural - natural abundance (ratio or abundance)
-label_strength <- function(time, dblt, spike, natural) {
-    df <- expand.grid(time = time, dblt = dblt, spike.ab = to_ab(spike), natural.ab = to_ab(natural), stringsAsFactors = FALSE)
-    mutate(df,
-           time.label = duration_label(time), # add labels
-           dblt.label = duration_label(dblt), # add labels
-           p = log(2)/as.numeric(dblt), # specific growth rate
-           decay = exp(-p * as.numeric(time)), # decay of old material
-           total.ab = quietly(set_attrib(weight(natural.ab, decay) + weight(spike.ab, 1 - decay), compound = "Sample")), # mass balance
-           total.delta = to_delta(to_ratio(total.ab), ref_ratio = to_ratio(natural)) # permil value
-         )
-}
-
+source("calculations.R")
 
 shinyServer(function(input, output, session) {
     
@@ -78,6 +17,53 @@ shinyServer(function(input, output, session) {
     session$onFlushed(function() {
         values$starting <- FALSE
     })
+    
+    # Generation times --------------
+    
+    data <- reactiveValues(
+      gen_times = data.frame(
+        value = c(1, 1, 1, 1, 10),
+        unit = c("hour", "day", "month", "year", "year"),
+        include = "yes",
+        stringsAsFactors = FALSE
+      )
+    )
+    
+    # hide/show gen times edit box
+    observe({
+      if (length(input$gen_times_rows_selected) > 0)  {
+        updateTextInput(session, "dblt_edit", 
+                        value = data$gen_times[input$gen_times_rows_selected,"value"])
+        updateSelectInput(session, "dblt_edit_units", 
+                          selected = data$gen_times[input$gen_times_rows_selected,"unit"])
+        shinyjs::show("gen_editbox_div")
+      } else
+        shinyjs::hide("gen_editbox_div")
+    })
+    
+    # save gen times entry
+    observe({
+      if (is.na(input$dblt_edit) || is.na(input$dblt_edit_units)) return()
+      isolate({
+        data$gen_times[input$gen_times_rows_selected,"value"] <- input$dblt_edit
+        data$gen_times[input$gen_times_rows_selected,"unit"] <- input$dblt_edit_units
+        shinyjs::runjs(
+          paste0(
+            "var table = $('#DataTables_Table_0').DataTable();",
+            "table.cell('.selected', 0).data(", input$dblt_edit, ").draw();",
+            "table.cell('.selected', 1).data('", input$dblt_edit_units, "').draw();")
+        )
+      })
+    })
+    
+    # gen times table
+    output$gen_times <- DT::renderDataTable({
+      datatable(isolate(data$gen_times), 
+                rownames = FALSE, filter = 'none',  selection = "single",
+                options = list(pageLength = nrow(isolate(data$gen_times)), autoWidth = TRUE, dom = "t", ordering = FALSE)
+      )
+    }, server = FALSE)
+    
     
     # Inputs processing ------------------------------------------------
     
@@ -174,7 +160,7 @@ shinyServer(function(input, output, session) {
             
             # data table for enrichment curves
             plot2.df <- label_strength(
-                time = duration(c(1, seq(0, max(plot.df$labeling_time) * input$plot2Xzoom, length.out = 50)), "seconds"), 
+                time = duration(c(1, seq(0, max(plot.df$labeling_time) * input$plot2Xzoom/100, length.out = 50)), "seconds"), 
                 dblt = dblts$dblts, 
                 spike = data$spikes[show],
                 natural = data$nat)
@@ -229,39 +215,49 @@ shinyServer(function(input, output, session) {
     
     # Plots ------------------
     
+    # hide/show edit box
+    observe({
+      if (input$tabs == "plot2")  {
+        shinyjs::show("plot_settings_div")
+      } else
+        shinyjs::hide("plot_settings_div")
+    })
+    
     # plot1
     plotInput <- reactive({
         data <- datasetInput() 
         
         # only update if datasetInput changed
-        isolate({
-            ggplot(data$plot.df,
-                   aes(x = dblt, y = labeling_time, fill = Label, colour = Label)) + 
-                geom_segment(aes(x=0, xend=dblt, y=labeling_time, yend=labeling_time), 
-                             arrow=arrow(length=unit(0.4,"cm"), ends="first", type="open", 
-                                         angle=15), linetype=2) + 
-                geom_segment(aes(x=dblt, xend=dblt, y=0, yend=labeling_time), 
-                             arrow=arrow(length=unit(0.4,"cm"), type="open", angle=15), 
-                             linetype=2) + 
-                geom_line(linetype=1) + geom_point(colour="black", shape = 21, size=4) +
-                scale_y_log10("labeling time",
-                    expand = c(0, 0.1), breaks = unique(data$plot.df$labeling_time), 
-                    labels = unique(data$plot.df$labeling_time.label)) + 
-                scale_x_log10("generation time", expand = c(0, 0.2), breaks = data$dblts, 
-                              labels = data$dblts.labels) + 
-                scale_fill_manual("Isotope spike", values = brewer.pal(3, "Set1")) +
-                scale_color_manual("Isotope spike", values = brewer.pal(3, "Set1")) +
-                labs(title = paste0("Required labeling times for enrichment to:\n", 
-                                   get_label(data$target.ab), " = ", signif(get_value(data$target.ab, "percent"), 3), " at% / ",
-                                   get_name(data$target.delta), " = ", round(get_value(data$target.delta)), " ", isotopia:::get_units(data$target.delta))) + 
-                theme_bw() + 
-                theme(panel.grid.major = element_blank(), 
-                      panel.grid.minor = element_blank(),
-                      legend.title.align = 0.5,
-                      text = element_text(size = 16),
-                      legend.position = "bottom") +
-                guides(fill = guide_legend(title.position = "top", nrow = 3)) 
+        p <- isolate({
+          ggplot(data$plot.df,
+                 aes(x = dblt, y = labeling_time, fill = Label, colour = Label)) + 
+            geom_segment(aes(x=0, xend=dblt, y=labeling_time, yend=labeling_time), 
+                         arrow=arrow(length=unit(0.4,"cm"), ends="first", type="open", 
+                                     angle=15), linetype=2) + 
+            geom_segment(aes(x=dblt, xend=dblt, y=0, yend=labeling_time), 
+                         arrow=arrow(length=unit(0.4,"cm"), type="open", angle=15), 
+                         linetype=2) + 
+            geom_line(linetype=1) + geom_point(colour="black", shape = 21, size=4) +
+            scale_y_log10("labeling time",
+                          expand = c(0, 0.1), breaks = unique(data$plot.df$labeling_time), 
+                          labels = unique(data$plot.df$labeling_time.label)) + 
+            scale_x_log10("generation time", expand = c(0, 0.2), breaks = data$dblts, 
+                          labels = data$dblts.labels) + 
+            scale_fill_manual("Isotope spike", values = brewer.pal(3, "Set1")) +
+            scale_color_manual("Isotope spike", values = brewer.pal(3, "Set1")) +
+            labs(title = paste0("Required labeling times for enrichment to:\n", 
+                                get_label(data$target.ab), " = ", signif(get_value(data$target.ab, "percent"), 3), " at% / ",
+                                get_name(data$target.delta), " = ", round(get_value(data$target.delta)), " ", isotopia:::get_units(data$target.delta))) + 
+            theme_bw() + 
+            theme(panel.grid.major = element_blank(), 
+                  panel.grid.minor = element_blank(),
+                  legend.title.align = 0.5,
+                  text = element_text(size = 16)) +
+            guides(fill = guide_legend(title.position = "top", nrow = 3)) 
         })
+        if (isolate(input$legend) == "below")
+          p <- p + theme(legend.position = "bottom") + guides(color = guide_legend(ncol=2,byrow=FALSE)) 
+        return(p)
     })
     
     # plot
@@ -269,7 +265,7 @@ shinyServer(function(input, output, session) {
         data <- datasetInput()
         
         # only update if datasetInput changed
-        isolate({
+        p <- isolate({
             if (input$plot2DataType == "permil") {
                 ylab <- get_label(data$plot2.df$total.delta)
                 ylabeller <- function(x) format(x, big.mark = ",", scientific = FALSE)
@@ -277,9 +273,9 @@ shinyServer(function(input, output, session) {
                 ylab <- get_label(data$plot2.df$total.ab)
                 ylabeller <- function(x)  paste0(signif(100*x, 1), " at%")
             }
-            
+          
             ggplot(data$plot2.df,
-                   aes(x = time, y = enrichment, colour = DBLT)) + 
+                   aes(x = as.numeric(time), y = enrichment, colour = DBLT)) + 
                 geom_line(linetype=1) + 
                 scale_x_continuous("", breaks = function(limits) pretty(limits, 10), labels = duration_label) +
                 scale_y_continuous(ylab, label = ylabeller) +
@@ -287,19 +283,16 @@ shinyServer(function(input, output, session) {
                 facet_grid(~Spike) + 
                 theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
                 theme(
-                    legend.position = "bottom", 
                     text = element_text(size = 16),
                     legend.title.align = 0.5,
                     axis.text.x = element_text(angle = 60, hjust = 1)) +
-                guides(
-                    colour = guide_legend(
-                        keywidth = 3, keyheight = 1,
-                        title.position = "top", 
-                        nrow = 1)) + 
                 coord_cartesian(
-                    xlim = c(min(data$plot2.df$time), max(data$plot2.df$time)),
-                    ylim = c(min(data$plot2.df$enrichment), input$plot2Yzoom*max(data$plot2.df$enrichment)))
+                   xlim = c(min(as.numeric(data$plot2.df$time)), max(as.numeric(data$plot2.df$time))),
+                   ylim = c(min(data$plot2.df$enrichment), input$plot2Yzoom/100*max(data$plot2.df$enrichment)))
         })
+        if (isolate(input$legend) == "below")
+          p <- p + theme(legend.position = "bottom") + guides(color = guide_legend(ncol=2,byrow=FALSE)) 
+        return(p)
     })
     
     
@@ -356,8 +349,10 @@ shinyServer(function(input, output, session) {
             return ("")
     })
     
+   
     # rendering plot
     output$plot <- renderPlot({
+      
         # don't load right away (only after the controls on the left have loaded)
         if (values$starting)
             return(NULL)
@@ -374,7 +369,8 @@ shinyServer(function(input, output, session) {
             suppressWarnings(print(p))
             setProgress(value = 5)
         })
-    })
+    },
+    height = reactive({input$updatePlot1; isolate(input$main_plot_height)}))
     
     # rendering plot2
     output$plot2 <- renderPlot({
@@ -390,20 +386,25 @@ shinyServer(function(input, output, session) {
             suppressWarnings(print(p))
             setProgress(value = 5)
         })
-    })
+    },
+    height = reactive({input$updatePlot2; isolate(input$main_plot_height)}))
     
     # saving plots
-    save_plot <- function(plot) {
-        return (
-            function(file) {
-                device <- function(..., version="1.4")
-                    grDevices::pdf(..., version=version)
-                ggsave(file, plot = plot, device = device)
-            }
-        )
-    }
-    output$downloadPlot <- downloadHandler(filename = function() { paste0('isotope_labeling_', input$ref, '_times.pdf') }, content = save_plot(plotInput()))
-    output$downloadPlot2 <- downloadHandler(filename = function() { paste0('isotope_labeling_', input$ref, '_curves.pdf') }, content = save_plot(plot2Input()))
+    output$save <- downloadHandler(
+      filename = function() { isolate(input$save_name) }, 
+      content = function(file) { 
+        device <- function(..., version="1.4") grDevices::pdf(..., version=version)
+        ggsave(file = file, plot = plotInput(), 
+               width = isolate(input$save_width), height = isolate(input$save_height), device = device)
+      })
+    
+    output$save2 <- downloadHandler(
+      filename = function() { isolate(input$save_name2) }, 
+      content = function(file) { 
+        device <- function(..., version="1.4") grDevices::pdf(..., version=version)
+        ggsave(file = file, plot = plot2Input(), 
+               width = isolate(input$save_width2), height = isolate(input$save_height2), device = device)
+      })
     
     # rendering table
     output$table <- renderTable({
@@ -421,9 +422,9 @@ shinyServer(function(input, output, session) {
     }, digits = 0, include.rownames = F, align = rep('r', ncol(datasetInput()$table.df) + 1))
     
     # saving table 
-    output$downloadTable <- downloadHandler(
-        filename = function() { paste0('isotope_labeling_', input$ref, '.csv') },
-        content = function(file) { write.csv(datasetInput()$table.df, file) }
+    output$save3 <- downloadHandler(
+        filename = function() { isolate(input$save_name3) },
+        content = function(file) { write.csv(datasetInput()$table.df, file = file) }
     )
     
 })

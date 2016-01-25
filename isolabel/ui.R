@@ -1,161 +1,222 @@
 library(shiny)
+library(shinydashboard)
+library(shinyBS)
+library(shinyjs)
+library(DT)
+source("widgets.R")
 
-# doubling time picking
-dblt_picker <- function(i, value = 1, unit = c("minute", "hour", "day", "week", "month", "year")) {
-    unit <- match.arg(unit)
-    units <- eval(formals(dblt_picker)$unit, list())
-    fluidRow(
-        column(3, numericInput(paste0("dblt", i), "", value, min = 1, step = 1)),
-        column(6, offset = 1, selectInput(paste0("dblt", i, "_units"), "", choices = units, selected = unit))
+header <- dashboardHeader(title = "Isotope calculator")
+
+##### SIDEBAR ######
+
+sidebar <- dashboardSidebar(
+  sidebarMenu( id = "tabs",
+    menuItem("Labeling times", tabName = "plot1", icon = icon("clock-o"), selected = TRUE),
+    menuItem("Enrichment curves", tabName = "plot2", icon = icon("line-chart")),
+    menuItem("Summary table", tabName = "table", icon = icon("table")),
+    menuItem("About", tabName = "about", icon = icon("cog"))
+  )
+)
+
+##### MAIN #####
+
+body <- dashboardBody(
+  
+  ##### SAVE DIALOGS #####
+  
+  bsModal("save_dialog", "Save plot", "downloadPlot", size = "small",
+          textInput("save_name", "Filename:", "isolabel_plot_times.pdf"),
+          numericInput("save_width", "Width [inches]:", 12),
+          numericInput("save_height", "Height [inches]:", 8),
+          downloadButton("save", "Save", icon("save"))
+  ),
+  
+  bsModal("save_dialog2", "Save plot", "downloadPlot2", size = "small",
+          textInput("save_name2", "Filename:", "isolabel_plot_curves.pdf"),
+          numericInput("save_width2", "Width [inches]:", 12),
+          numericInput("save_height2", "Height [inches]:", 8),
+          downloadButton("save2", "Save", icon("save"))
+  ),
+  
+  bsModal("save_dialog3", "Save table", "downloadTable", size = "small",
+          textInput("save_name3", "Filename:", "isolabel_table.csv"),
+          downloadButton("save3", "Save", icon("save"))
+  ),
+  
+  ##### OUTPUTS ####
+  
+  fluidRow(
+    column(width = 9, 
+          
+           ### plot 1 ###
+           tabItems(
+             tabItem(tabName = "plot1",
+                     box(
+                       div(align = "right", 
+                           actionLink("updatePlot1", "Refresh", icon = icon("gear"), 
+                                      style = "padding-right:1em; padding-left:1em;"), 
+                           bsTooltip("updatePlot1", "Refresh the plot"),
+                           actionLink("downloadPlot", "Save plot", icon = icon("download")),
+                           bsTooltip("downloadPlot", "Download the plot as a PDF")
+                       ),
+                       status = "primary", solidHeader = TRUE, width = 12,
+                       plotOutput("plot", height = "100%")
+                     )
+             ),
+             
+             ### plot 2 ###
+             tabItem(tabName = "plot2",
+                     box(
+                       div(align = "right", 
+                           actionLink("updatePlot2", "Refresh", icon = icon("gear"), 
+                                      style = "padding-right:1em; padding-left:1em;"), 
+                           bsTooltip("updatePlot2", "Refresh the plot"),
+                           actionLink("downloadPlot2", "Save plot", icon = icon("download")),
+                           bsTooltip("downloadPlot2", "Download the plot as a PDF")
+                       ),
+                       status = "primary", solidHeader = TRUE, width = 12,
+                       plotOutput("plot2", height = "100%"))
+             ),
+                  
+             ### table ###    
+             tabItem(tabName = "table", 
+                     box(
+                       div(align = "right", 
+                           actionLink("updateTable", "Refresh", icon = icon("gear"), 
+                                      style = "padding-right:1em; padding-left:1em;"), 
+                           bsTooltip("updateTable", "Refresh the table"),
+                           actionLink("downloadTable", "Save table", icon = icon("download")),
+                           bsTooltip("downloadTable", "Download the table as a CSV file")
+                       ),
+                       status = "primary", solidHeader = TRUE, width = 12,         
+                       
+                       h4("Enrichment of different generation times as function of label strength and incubation time"), 
+                       radioButtons(
+                         "tableDataType", "Report data in:",
+                         c(`Enrichment [in permil]` = "permil",
+                           `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
+                       br(),
+                       tableOutput("table")
+                     )
+                     
+             ),
+             
+             ### about ###    
+             tabItem(
+               tabName = "about", 
+               box(title = "About", status = "success", solidHeader = TRUE, width = 12,
+                   h2("Isotope labeling calculator"),
+                   
+                   withMathJax(),
+                   h3("This app is intended for use in ", em("estimating"), " expected enrichments from stable isotope labeling in microbial populations. It is based on isotopic enrichment resulting from unbiased clonal growth in the presence of an isotopic label: $$F{\\left(t\\right)}=F_{N}\\left(1-e^{-{\\mu}\\cdot{t}}\\right)+F_{t_0}\\cdot{e^{-{\\mu}\\cdot{t}}}
+\\left(\\mu{}=\\ln(2)/T\\right)$$ with \\({F_{N}}\\) the isotopic composition of new biomass generated in the presence of the isotope label (using fractional abundances \\(F\\) is important for correct mass balance!). Substituting the growth rate for the generation time \\(\\left(µ = \\ln(2) / T\\right)\\), one can readily calculate the required labeling time to reach a target isotopic composition \\({F_{f}}\\): $$t_{label}=\\frac{T}{ln(2)}\\cdot{\\ln\\left(\\frac{F_N-F_{t_0}}{F_N-F_f}\\right)}$$ This app is intended to make it easy to explore this space for different isotope systems and takes care of all the isotope conversions and mixing calculations between existing and isotopically labelled pools."),
+                   
+                   br(),
+                   h2("Source code"),
+                   h3("This app was written by ", a(href="mailto:sebastian.kopf@colorado.edu", "Sebastian Kopf"), " and is powered by ", a(href="http://www.rstudio.com/", "RStudio"), "'s ", a(href="http://www.rstudio.com/shiny/", "Shiny engine"), ".", "The source code for this application is released under ", a(href="http://www.gnu.org/licenses/gpl-3.0.html", "GPL-3")," and is available on ", a(href="https://www.github.com/sebkopf/shinyApps/tree/master/isolabel", "GitHub"), ".", "Please use the repository's", a(href="https://github.com/sebkopf/shinyApps/issues", "Issue Tracker"), "for any feedback, suggestions and bug reports."
+                   )
+               )
+             )
+           )
+          
+    ),
+
+    ##### INPUTS #####
+    
+    column(width = 3,
+           
+           ### plot options ###
+           
+           box(title = "Plot Options", 
+               solidHeader = TRUE, collapsible = TRUE, status = "danger", collapsed = FALSE, width = 12,
+               div( style = "",
+                    div(style="display:inline-block;",tags$label("Height:")),
+                    div(style="display:inline-block; width: 60px;",
+                        tags$input(id = "main_plot_height", type = "number", 
+                                   value = 600, min = 100, step = 50, class = "form-control")),
+                    div(style="display:inline-block;",tags$label("px"))
+               ),
+               div(style = "",
+                   div(style="display:inline-block;",tags$label("Model:")),
+                   div(style="display:inline-block; width: 60px;",
+                       tags$input(id = "model_steps", type = "number", 
+                                  value = 15, min = 5, step = 5, class = "form-control")),
+                   div(style="display:inline-block;",tags$label("steps"))
+               ),
+               radioButtons("legend", "Legend Position:", c("Right" = "right", "Below" = "below"), 
+                            selected = "right", inline = TRUE),
+               shinyjs::useShinyjs(),
+               shinyjs::hidden(
+                 div(id = "plot_settings_div",
+                     sliderInput("plot2Yzoom", "Y-axis (enrichment) zoom:",
+                                 min = 0.1, max = 100, step = 0.1, value = 100, 
+                                 post = "%"),
+                     
+                     radioButtons(
+                       "plot2DataType", "",
+                       c(`Enrichment [in permil]` = "permil",
+                         `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
+                     
+                     sliderInput("plot2Xzoom", "X-axis (time scale) zoom:",
+                                 min = 0.1, max = 100, step = 0.1, value = 100, 
+                                 post = "%")
+                 ))
+           ),
+           
+           ### generation times ###
+           
+           box(title = "Generation times", 
+               solidHeader = TRUE, collapsible = TRUE, status = "warning", collapsed = FALSE, width = 12,
+               DT::dataTableOutput('gen_times'),
+               shinyjs::hidden(
+                 div(id = "gen_editbox_div",
+                     h4("Edit generation time"),
+                     dblt_picker("_edit", unit = "hour")
+                 )
+               ),
+               dblt_picker(1, unit = "hour"),
+               dblt_picker(2, unit = "day"),
+               dblt_picker(3, unit = "month"),
+               dblt_picker(4, unit = "year"),
+               dblt_picker(5, value = 10, unit = "year")
+           ),
+           
+           box(title = "Isotope labels", 
+               solidHeader = TRUE, collapsible = TRUE, status = "primary", collapsed = FALSE, width = 12,    
+               fluidRow(
+                 column(4, h4("Isotope label:")),
+                 column(4, selectInput("ref", "", choices = c("2H", "13C", "15N", "18O", "34S")))
+               ),
+               
+               h5("Label strengths"),
+               label_picker(vols = c(1, 5, 10), concs = c(1, 1, 1), strengths = c(0.5, 0.5, 0.99)),
+               
+               h5("Target enrichment"),
+               radioButtons(
+                 "targetType", "",
+                 c(`Relative enrichment [in permil]` = "permil",
+                   `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
+               
+               conditionalPanel(
+                 condition = "input.targetType == 'permil'",
+                 numericInput("intensity_permil", "", 500, min = 0, step = 100)
+               ),
+               
+               conditionalPanel(
+                 condition = "input.targetType == 'frac'",
+                 sliderInput("intensity_F", "", 
+                             min = 0, max = 1, step = 0.001, value = 0.05, 
+                             post = "%", animate=TRUE),
+                 htmlOutput("intensity_F_message"),
+                 tags$style(type="text/css", HTML("#intensity_F_message {color: #f50000;}"))
+               )
+               
+           )
+           
     )
-}
+  )
+)
 
-# label strengths selection
-label_picker <- function(vols, concs, strengths) {
-    r <- list(
-        fluidRow(
-            # adds up to 12 with the offsets
-            column(3, offset = 1, strong("Volume")),
-            column(3, offset = 1, strong("Concentration")),
-            column(3, offset = 1, strong(htmlOutput("rare_iso_header")))),
-        fluidRow(
-            column(1, span("init", title = "The initial isotopic composition of the sample.")),
-            column(3, numericInput("label.ref_vol", "", 1000, min = 0)),
-            column(3, offset = 1, numericInput("label.ref_conc", "", 1, min = 0)),
-            column(3, offset = 1, "natural")
-        ),
-        htmlOutput("nat"))
-    for (i in 1:length(strengths)) {
-        r <- c(r, list(
-            fluidRow(
-                column(1, span(paste0("s#", i), title = paste0("Isotope spike #", i))),
-                column(3, numericInput(paste0("label", i, "_vol"), "", vols[i], min = 0)),
-                column(3, offset = 1, numericInput(paste0("label", i, "_conc"), "", concs[i], min = 0)),
-                column(3, offset = 1, sliderInput(paste0("label", i), "", min = 0, max = 1, step = 0.01, value = strengths[i], format="#.#%"))
-            ),
-            htmlOutput(paste0("label", i, "_error")),
-            tags$style(type="text/css", HTML(paste0("#label", i, "_error {color: #f50000;}"))),
-            htmlOutput(paste0("label", i, "_msg")),
-            tags$style(type="text/css", HTML(paste0("#label", i, "_msg {color: #00AF64;}")))
-        ))
-    }
-    r <- c(r, list(
-        checkboxGroupInput(inputId="show", label="Show labeling strengths (spike #):", choices=1:length(strengths), selected=1:length(strengths)),
-        tags$style(type="text/css", HTML("#show>*{float: left; margin-right: 15px; height: 20px;} #show {height: 20px;}"))))
-    r
-}
+dashboardPage(header, sidebar, body)
+    
 
-# Define UI that plots the isotope label enrichment 
-shinyUI(
-    fluidPage(
-        
-        # Application headers
-        titlePanel("Isotope labeling calculator"),
-        "This app is intended for use in ", em("estimating"), " incubation times and isotopic enrichments in isotope labeling experiments.",
-        fluidRow(
-            "The source code is available on ",
-            a(href="https://www.github.com/sebkopf/shinyApps#isolabel", "GitHub"),
-            ". Please use the repository's",
-            a(href="https://github.com/sebkopf/shinyApps/issues", "Issue Tracker"),
-            "for any feedback, suggestions and bug reports."
-        ),
-        
-        hr(),
-        
-        sidebarLayout(
-            
-            # side bar panel
-            sidebarPanel(
-                fluidRow(
-                    column(4, h4("Isotope label:")),
-                    column(4, selectInput("ref", "", choices = c("2H", "13C", "15N", "18O", "34S")))
-                ),
-                
-                h5("Label strengths"),
-                label_picker(vols = c(1, 5, 10), concs = c(1, 1, 1), strengths = c(0.5, 0.5, 0.99)),
-                
-                h5("Target enrichment"),
-                radioButtons(
-                    "targetType", "",
-                    c(`Relative enrichment [in permil]` = "permil",
-                      `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
-                
-                conditionalPanel(
-                    condition = "input.targetType == 'permil'",
-                    numericInput("intensity_permil", "", 500, min = 0, step = 100)
-                ),
-                
-                conditionalPanel(
-                    condition = "input.targetType == 'frac'",
-                    sliderInput("intensity_F", "", 
-                                min = 0, max = 1, step = 0.001, value = 0.05, 
-                                format="#.#%", animate=TRUE),
-                    htmlOutput("intensity_F_message"),
-                    tags$style(type="text/css", HTML("#intensity_F_message {color: #f50000;}"))
-                ),
-                
-                h5("Generation times"),
-                dblt_picker(1, unit = "hour"),
-                dblt_picker(2, unit = "day"),
-                dblt_picker(3, unit = "month"),
-                dblt_picker(4, unit = "year"),
-                dblt_picker(5, value = 10, unit = "year")
-            ),
-            
-            # Main panel / output
-            mainPanel(
-                tags$head(tags$style(type="text/css", ".tab-content {overflow: visible;}")),
-                
-                tabsetPanel(id = "tabs",
-                    tabPanel(value = "plot1", "Labeling Times", 
-                             fluidRow(column(12, 
-                                 actionButton("updatePlot1", "Update Plot", icon("refresh")), 
-                                 downloadButton('downloadPlot', 'Download Plot'))),
-                             br(),
-                             plotOutput("plot", height="600px")),
-                    tabPanel(value = "plot2", "Enrichment Curves", 
-                            fluidRow(
-                                column(4,
-                                   h5("Y-axis (enrichment):"),
-                                   sliderInput("plot2Yzoom", "Zoom:",
-                                               min = 0.001, max = 1, step = 0.001, value = 1, 
-                                               format="#.#%"),
-                                   radioButtons(
-                                       "plot2DataType", "",
-                                       c(`Enrichment [in permil]` = "permil",
-                                         `Total abundance [at% rare isotope]` = "frac"), selected="permil")
-                                ),
-                                column(4, 
-                                   h5("X-axis (time scale):"),
-                                   sliderInput("plot2Xzoom", "Zoom:",
-                                               min = 0.001, max = 1, step = 0.001, value = 1, 
-                                               format="#.#%")
-                                )
-                            ),
-                            fluidRow(column(12, 
-                                            actionButton("updatePlot2", "Update Plot", icon("refresh")), 
-                                            downloadButton('downloadPlot2', 'Download Plot'))),
-                            br(),
-                            plotOutput("plot2", height="500px")),
-                    tabPanel(value = "table", "Summary Table", 
-                             h4("Enrichment of different generation times as function of label strength and incubation time"), 
-                             radioButtons(
-                                 "tableDataType", "Report data in:",
-                                 c(`Enrichment [in permil]` = "permil",
-                                   `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
-                             fluidRow(column(12, 
-                                             actionButton("updateTable", "Update Table", icon("refresh")),
-                                             downloadButton('downloadTable', 'Download Table'))),
-                             br(),
-                             tableOutput("table")
-                    ),      
-                    selected = "plot1", position = "above", type = "pills")
-            ), 
-            
-            position = "left"
-        ),        
-    div("Written by ", a(href="mailto:skopf@caltech.edu", "Sebastian Kopf"), br(), 
-        "Powered by ", a(href="http://www.rstudio.com/", "RStudio"), "'s ", a(href="http://www.rstudio.com/shiny/", "Shiny engine"), br(),
-        "Comes with absolutely no warranty", br(),
-        "Released under ", a(href="http://www.gnu.org/licenses/gpl-3.0.html", "GPL-3"), align="right")
-))
