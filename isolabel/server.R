@@ -52,7 +52,6 @@ shinyServer(function(input, output, session) {
     # Isotope labels --------------
     source("iso_labels.R", local = TRUE)
     
-    
     # Inputs processing ------------------------------------------------
     
     # data frame for plot 1
@@ -61,12 +60,13 @@ shinyServer(function(input, output, session) {
       input$updatePlot1 # update button pressed
       
       isolate({
-        data$plot1.df <- NA
+        data$plot1.df <- NULL
         
         # checks
+        if (data$target.ab <= to_ab(data$nat)) return() # problem
         if (nrow(get_iso_labels()) == 0) return() # no label is strong enough or excluded because of error
         if (nrow(get_doubling_times()) == 0) return() # no doubling times selected
- 
+        
         data$plot1.df <- label_time(
           dblt = get_doubling_times()$dblt, 
           target = data$target.ab, 
@@ -75,7 +75,6 @@ shinyServer(function(input, output, session) {
           merge(get_iso_labels(), by.x = "tracer.ab", by.y = "effective.wab") %>% 
           mutate(Label = factor(Label, levels = get_iso_labels()$Label))
 
-        
 #         # data table for enrichment curves
 #         plot2.df <- label_strength(
 #           time = duration(c(1, seq(0, max(plot.df$labeling_time) * input$plot2Xzoom/100, length.out = 50)), "seconds"), 
@@ -228,12 +227,6 @@ shinyServer(function(input, output, session) {
             # labels
             show <- (which(data$spikes.show & !data$spikes.error))
             
-            # errors
-            if (length(show) == 0)
-                stop("Please enable at least one valid labeling strength.")
-            if (data$target.ab <= to_ab(data$nat))
-                stop("Please choose a higher target enrichment.")
-            
             # spikes data frame
             spikes.df <- mutate(data.frame(data[c("spikes", "vols", "concs", "strengths")]),
                              Label = paste0("Dil=", vols, ":", input$label.ref_vol, ", Conc=", concs, ", ", input$ref, "=", 100*strengths, "at%"))
@@ -333,53 +326,23 @@ shinyServer(function(input, output, session) {
     
     # labeling strength problems
     output$iso_labels_error <- renderUI({
-      if (any(data$iso_labels$error)) {
-        return (paste0("Warning: some cannot possibly reach target enrichment."))
+      if (nrow(data$iso_labels %>% subset(!error & include == "yes")) == 0) {
+        return (paste0("Error: please include at least one valid labeling strength."))
+      } else if (any(data$iso_labels$error)) {
+          return (paste0("Warning: some cannot possibly reach target enrichment."))
       } else
         return ("")
     })
     
-    
-    # labeling strengths messages output
-    generate_label_error <- function(i) {
-        renderUI({
-            data <- labelsInput()
-            if (data$spikes.error[i]) {
-                return (paste0("Too small, can't possibly reach target enrichment."))
-            } else
-                return ("")
-        })
-    }
-    generate_label_msg <- function(i) {
-        renderUI({
-            data <- labelsInput()
-            if (data$spikes.error[i]) {
-                return("")
-            } else {
-                d <- to_delta(to_ratio(data$spikes[i]), ref_ratio = data$nat)
-                return (paste0("Effective labeling strength: ", signif(get_value(data$spikes[i], "percent"), 3), " at% ", 
-                               data$spikes@isoname, " / ", signif(get_value(d), 3) , " permil"))
-            }
-        })
-    }
-    
-    output$label1_error <- generate_label_error(1)
-    output$label2_error <- generate_label_error(2)
-    output$label3_error <- generate_label_error(3)   
-    output$label1_msg <- generate_label_msg(1)
-    output$label2_msg <- generate_label_msg(2)
-    output$label3_msg <- generate_label_msg(3) 
-    
     # enrichment info output
     output$intensity_F_message <- renderUI({ 
-        data <- labelsInput()
         if (data$target.ab <= to_ab(data$nat))
-            return(paste0("Too small, target enrichment must exceed natural abundance."))
+            return(paste0("Error: target enrichment too small, it must at least exceed natural abundance."))
         else
             return ("")
     })
     
-   
+    
     # rendering plot
     output$plot <- renderPlot({
       

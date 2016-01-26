@@ -1,9 +1,10 @@
 # labeling strengths
 get_iso_labels <- reactive({
-  data$iso_labels %>% 
-    subset(!error & include == "yes") %>% 
-    mutate(
-      Label = paste0("Dil=", vol, ":", input$label.ref_vol, ", Conc=", conc, ", ", input$ref, "=", spike, "at%"))
+  df <- data$iso_labels %>% 
+    subset(!error & include == "yes") 
+  if (nrow(df) == 0) return(df)
+  else df  %>% mutate(
+    Label = paste0("Dil=", vol, ":", input$label.ref_vol, ", Conc=", conc, ", ", input$ref, "=", spike, "at%"))
 })
 
 # reference, iso target and label strengths
@@ -18,10 +19,6 @@ observe({
   target <- set_attrib(target, minor = data$nat@isoname, major = data$nat@major) # set isotope names
   data$target.ab <- to_ab(to_ratio(target)) # abundance value
   data$target.delta <- to_delta(to_ratio(target), ref_ratio = data$nat) # delta value
-  
-  # checks (implement as error message to the user?)
-  if (data$target.ab <= to_ab(data$nat))
-    stop("Please choose a higher target enrichment.")
   
   # find spikes via weighted abundance (wab) 
   init.wab <- abundance(rep(get_value(data$nat), nrow(data$iso_labels)), 

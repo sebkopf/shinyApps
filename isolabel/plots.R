@@ -1,5 +1,15 @@
+error_plot <- 
+  ggplot() + theme_bw() + 
+  annotate("text", label = "Please choose valid input parameters.", x = 0.5, y = 0.5, size = 12) + 
+  labs(x = "", y = "")
+  
+
 # plot1
 generate_plot1 <- reactive({
+  
+  if (is.null(data$plot1.df)) {
+    return(error_plot)
+  }
   
   p <- 
     data$plot1.df %>% 
