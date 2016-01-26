@@ -1,26 +1,26 @@
+#' @param post text after the input
+#' @param type the kind of input, e.g. number or text
+#' @param class what style it has 
+generate_input_row <- function (id, label, post = NULL, type = "number", class = "input-mini", width = "60px", ...) {
+  div(style="display:inline-block",
+      tags$label(label, `for` = id), 
+      tags$input(id = id, type = type, ..., class = class, style=paste0("width: ", width, ";")),
+      if(!is.null(post)) tags$label(post))
+}
+
 
 # label strengths selection
 label_picker <- function(vols, concs, strengths) {
   r <- list(
-    fluidRow(
-      # adds up to 12 with the offsets
-      column(3, offset = 1, strong("Volume")),
-      column(3, offset = 1, strong("Concentration")),
-      column(3, offset = 1, strong(htmlOutput("rare_iso_header")))),
-    fluidRow(
-      column(1, span("init", title = "The initial isotopic composition of the sample.")),
-      column(3, numericInput("label.ref_vol", "", 1000, min = 0)),
-      column(3, offset = 1, numericInput("label.ref_conc", "", 1, min = 0)),
-      column(3, offset = 1, "natural")
-    ),
-    htmlOutput("nat"))
+    
+  )
   for (i in 1:length(strengths)) {
     r <- c(r, list(
       fluidRow(
         column(1, span(paste0("s#", i), title = paste0("Isotope spike #", i))),
         column(3, numericInput(paste0("label", i, "_vol"), "", vols[i], min = 0)),
         column(3, offset = 1, numericInput(paste0("label", i, "_conc"), "", concs[i], min = 0)),
-        column(3, offset = 1, sliderInput(paste0("label", i), "", min = 0, max = 1, step = 0.01, value = strengths[i], post = "%"))
+        column(3, offset = 1, sliderInput(paste0("label", i), "", min = 0, max = 100, step = 1, value = strengths[i], post = "%"))
       ),
       htmlOutput(paste0("label", i, "_error")),
       tags$style(type="text/css", HTML(paste0("#label", i, "_error {color: #f50000;}"))),

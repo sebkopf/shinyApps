@@ -19,7 +19,7 @@ shinyServer(function(input, output, session) {
         values$starting <- FALSE
     })
     
-    # Generation times --------------
+    # Data fields --------------
     
     data <- reactiveValues(
       gen_times = data.frame(
@@ -27,8 +27,23 @@ shinyServer(function(input, output, session) {
         units = c("hour", "day", "month", "year", "year"),
         include = "yes",
         stringsAsFactors = FALSE
-      )
+      ),
+      
+      iso_labels = data.frame(
+        vol = c(1, 5, 10), 
+        conc = c(1, 1, 1), 
+        tracer = c(50, 50, 99),
+        include = "yes",
+        stringsAsFactors = FALSE,
+        check.names = FALSE
+      ),
+      
+      iso_ref = NA,
+      target.ab = NA,
+      target.delta = NA
     )
+    
+    # Generation times --------------
     
     # hide/show gen times edit box
     observe({
@@ -53,7 +68,7 @@ shinyServer(function(input, output, session) {
         with(data$gen_times[input$gen_times_rows_selected, ], {
           shinyjs::runjs(
             paste0(
-              "var table = $('#DataTables_Table_0').DataTable();",
+              "var table = $('#DataTables_Table_1').DataTable();",
               "table.cell('.selected', 0).data(", value, ").draw();",
               "table.cell('.selected', 1).data('", units, "').draw();",
               "table.cell('.selected', 2).data('", include, "').draw();")
@@ -73,6 +88,35 @@ shinyServer(function(input, output, session) {
     }, server = FALSE)
     
     
+    # Isotope labels --------------
+    
+    # 
+    
+    
+    # isolabels table
+    output$iso_labels <- DT::renderDataTable({
+      tracer_label <- paste0("tracer [at% ", data$iso_ref@isoname, "]")
+      effective_label <- paste0("effective [at% ", data$iso_ref@isoname, "]")
+      datatable(data$iso_labels %>% 
+                  dplyr::select(vol, conc, tracer = tracer.wab, effective = spike.wab, include) %>% 
+                  dplyr::mutate(
+                    tracer = tracer %>% get_value("percent") %>% signif(3),
+                    effective = effective %>% get_value("percent") %>% signif(3)) %>% 
+                  dplyr::rename_(.dots = list("tracer", "effective") %>% 
+                                   setNames(c(tracer_label, effective_label))), 
+                rownames = FALSE, filter = 'none',  selection = "single",
+                options = list(
+                  columnDefs = list(list(className = 'dt-center', targets = 0:4)), # center cols
+                  pageLength = nrow(data$iso_labels), autoWidth = TRUE, dom = "t", ordering = FALSE)
+      ) %>% 
+        # highlight effective tracers that are not high enough for the target enrichment
+        formatStyle(
+          effective_label,
+          color = styleInterval(data$target.ab %>% get_value("percent") %>% signif(3), c('red', 'black'))
+        )
+    }, server = FALSE)
+    
+    
     # Inputs processing ------------------------------------------------
     
     # doubling times
@@ -86,18 +130,57 @@ shinyServer(function(input, output, session) {
           label = paste0(value, " ", units, if(value > 1) "s"))
     })
     
+    # reference, iso target and label strengths
+    observe({
+      
+      # find target
+      data$iso_ref <- get_standard(minor = input$ref)
+      if (input$targetType == 'permil')
+        target <- delta(input$intensity_permil, ref_ratio = data$iso_ref)
+      else 
+        target <- abundance(input$intensity_F/100)
+      target <- set_attrib(target, minor = data$iso_ref@isoname, major = data$iso_ref@major) # set isotope names
+      data$target.ab <- to_ab(to_ratio(target)) # abundance value
+      data$target.delta <- to_delta(to_ratio(target), ref_ratio = data$iso_ref) # delta value
+      
+      # find spikes via weighted abundance (wab) 
+      init.wab <- abundance(rep(get_value(data$iso_ref), nrow(data$iso_labels)), 
+                                weight = input$label.ref_vol * input$label.ref_conc)
+      
+      data$iso_labels <-
+        data$iso_labels %>% 
+        mutate(
+          tracer.wab = abundance(tracer/100, weight = vol * conc),
+          spike.wab = tracer.wab + init.wab,
+          error = spike.wab <= data$target.ab
+        )
+      
+    })
+    
+    # labeling strengths
+    get_labeling_strengths <- reactive({
+      message("getting labeling strengths, ref and target:")
+      print(data$iso_ref)
+      print(data$target.ab)
+      print(data$target.delta)
+      print(data$iso_labels %>% as.list())
+      message("end of getting labeling strengths")
+      data$iso_labels
+    })
+    
     # labeling strengths
     labelsInput <- reactive({
         data <- list()
         
         # natural abundance reference 
         data$nat <- get_standard(minor = input$ref)
+        #get_labeling_strengths()
         
         # target enrichment
         if (input$targetType == 'permil')
             data$target <- delta(input$intensity_permil, ref_ratio = data$nat)
         else 
-            data$target <- abundance(input$intensity_F)
+            data$target <- abundance(input$intensity_F/100)
         
         data$target <- set_attrib(data$target, minor = data$nat@isoname, major = data$nat@major) # set isotope names
         data$target.ab <- to_ab(to_ratio(data$target)) # abundance value
@@ -107,7 +190,7 @@ shinyServer(function(input, output, session) {
         wnat <- abundance(rep(get_value(data$nat), 3), weight = input$label.ref_vol * input$label.ref_conc)
         
         # weighted spikes
-        data$strengths <- sapply(1:3, function(i) input[[paste0("label", i)]], simplify = T)
+        data$strengths <- sapply(1:3, function(i) input[[paste0("label", i)]]/100, simplify = T)
         data$vols <- sapply(1:3, function(i) input[[paste0("label", i, "_vol")]], simplify = T)
         data$concs <- sapply(1:3, function(i) input[[paste0("label", i, "_conc")]], simplify = T)
         wspikes <- abundance(data$strengths, weight = data$vols * data$concs)
@@ -116,6 +199,9 @@ shinyServer(function(input, output, session) {
         data$spikes <- set_attrib(abundance(get_value(wnat + wspikes)), minor = data$nat@isoname, major = data$nat@major)
         data$spikes.show <- 1:3 %in% as.integer(input$show)
         data$spikes.error <- (data$spikes <= data$target.ab)
+        
+        message("spikes: ")
+        print(data$spikes)
         
         return(data)
     })
@@ -299,7 +385,10 @@ shinyServer(function(input, output, session) {
     
     # spikes table header
     output$rare_iso_header <- renderUI({
-        paste0(input$ref, " [at%]")
+      ref <- get_standard(minor = input$ref)
+      list(strong("Initial composition:", 
+             ref %>% to_ab() %>% switch_notation("percent") %>% get_value() %>%  signif(3),
+             "at%", input$ref))
     })
     
     # natural abundance info output
@@ -307,6 +396,15 @@ shinyServer(function(input, output, session) {
         ref <- get_standard(minor = input$ref)
         paste0("Reference: ", get_label(ref), ": ", signif(get_value(ref), 4))
     })
+    
+    # labeling strength problems
+    output$iso_labels_error <- renderUI({
+      if (any(data$iso_labels$error)) {
+        return (paste0("Warning: some cannot possibly reach target enrichment."))
+      } else
+        return ("")
+    })
+    
     
     # labeling strengths messages output
     generate_label_error <- function(i) {

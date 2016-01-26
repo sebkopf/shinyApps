@@ -46,7 +46,7 @@ body <- dashboardBody(
   ##### OUTPUTS ####
   
   fluidRow(
-    column(width = 9, 
+    column(width = 8, 
           
            ### plot 1 ###
            tabItems(
@@ -123,26 +123,15 @@ body <- dashboardBody(
 
     ##### INPUTS #####
     
-    column(width = 3,
+    column(width = 4,
            
            ### plot options ###
            
            box(title = "Plot Options", 
-               solidHeader = TRUE, collapsible = TRUE, status = "danger", collapsed = FALSE, width = 12,
-               div( style = "",
-                    div(style="display:inline-block;",tags$label("Height:")),
-                    div(style="display:inline-block; width: 60px;",
-                        tags$input(id = "main_plot_height", type = "number", 
-                                   value = 600, min = 100, step = 50, class = "form-control")),
-                    div(style="display:inline-block;",tags$label("px"))
-               ),
-               div(style = "",
-                   div(style="display:inline-block;",tags$label("Model:")),
-                   div(style="display:inline-block; width: 60px;",
-                       tags$input(id = "model_steps", type = "number", 
-                                  value = 15, min = 5, step = 5, class = "form-control")),
-                   div(style="display:inline-block;",tags$label("steps"))
-               ),
+               solidHeader = TRUE, collapsible = TRUE, status = "success", collapsed = TRUE, width = 12,
+               
+               generate_input_row("main_plot_height", "Height:", post = "px", value = 600, min = 100, step = 50),
+               
                radioButtons("legend", "Legend Position:", c("Right" = "right", "Below" = "below"), 
                             selected = "right", inline = TRUE),
                shinyjs::useShinyjs(),
@@ -163,10 +152,52 @@ body <- dashboardBody(
                  ))
            ),
            
+           ### isotope labels ###
+           
+           box(title = "Isotope system", 
+               solidHeader = TRUE, collapsible = TRUE, status = "warning", collapsed = FALSE, width = 12,   
+               h4(selectInput("ref", NULL, choices = c("2H", "13C", "15N", "18O", "34S"))),
+               htmlOutput("nat"),
+               htmlOutput("rare_iso_header"),
+               generate_input_row("label.ref_vol", "Initial volume:", value = 1000, step = 50, min = 0),
+               generate_input_row("label.ref_conc", "Initial concentration:", value = 1, step = 0.1, min = 0),
+               br(),
+               strong("Target enrichment:"),
+               radioButtons(
+                 "targetType", NULL,
+                 c(`Relative enrichment [in permil]` = "permil",
+                   `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
+               
+               conditionalPanel(
+                 condition = "input.targetType == 'permil'",
+                 numericInput("intensity_permil", NULL, 500, min = 0, step = 100)
+               ),
+               
+               conditionalPanel(
+                 condition = "input.targetType == 'frac'",
+                 sliderInput("intensity_F", NULL, post = "%",
+                             min = 0, max = 100, step = 0.1, value = 1.5), #animate=TRUE),
+                 htmlOutput("intensity_F_message"),
+                 tags$style(type="text/css", HTML("#intensity_F_message {color: #f50000;}"))
+               ),
+               
+               h3("Isotope label strengths:"),
+               htmlOutput("iso_labels_error"),
+               tags$style(type="text/css", HTML("#iso_labels_error {color: #f50000;}")),
+               DT::dataTableOutput('iso_labels'),
+               
+               
+               label_picker(vols = c(1, 5, 10), concs = c(1, 1, 1), strengths = c(50, 50, 99))
+               
+               
+               
+           ),
+           
+           
            ### generation times ###
            
            box(title = "Generation times", 
-               solidHeader = TRUE, collapsible = TRUE, status = "warning", collapsed = FALSE, width = 12,
+               solidHeader = TRUE, collapsible = TRUE, status = "danger", collapsed = TRUE, width = 12,
                DT::dataTableOutput('gen_times'),
                shinyjs::hidden(
                  div(id = "gen_editbox_div",
@@ -180,38 +211,6 @@ body <- dashboardBody(
                      )
                  )
                )
-           ),
-           
-           box(title = "Isotope labels", 
-               solidHeader = TRUE, collapsible = TRUE, status = "primary", collapsed = FALSE, width = 12,    
-               fluidRow(
-                 column(4, h4("Isotope label:")),
-                 column(4, selectInput("ref", "", choices = c("2H", "13C", "15N", "18O", "34S")))
-               ),
-               
-               h5("Label strengths"),
-               label_picker(vols = c(1, 5, 10), concs = c(1, 1, 1), strengths = c(0.5, 0.5, 0.99)),
-               
-               h5("Target enrichment"),
-               radioButtons(
-                 "targetType", "",
-                 c(`Relative enrichment [in permil]` = "permil",
-                   `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
-               
-               conditionalPanel(
-                 condition = "input.targetType == 'permil'",
-                 numericInput("intensity_permil", "", 500, min = 0, step = 100)
-               ),
-               
-               conditionalPanel(
-                 condition = "input.targetType == 'frac'",
-                 sliderInput("intensity_F", "", 
-                             min = 0, max = 1, step = 0.001, value = 0.05, 
-                             post = "%", animate=TRUE),
-                 htmlOutput("intensity_F_message"),
-                 tags$style(type="text/css", HTML("#intensity_F_message {color: #f50000;}"))
-               )
-               
            )
            
     )
