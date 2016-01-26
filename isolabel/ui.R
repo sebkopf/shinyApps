@@ -11,9 +11,9 @@ header <- dashboardHeader(title = "Isotope calculator")
 
 sidebar <- dashboardSidebar(
   sidebarMenu( id = "tabs",
-    menuItem("Labeling times", tabName = "plot1", icon = icon("clock-o"), selected = TRUE),
+    menuItem("Labeling times", tabName = "plot1", icon = icon("clock-o"), selected = FALSE),
     menuItem("Enrichment curves", tabName = "plot2", icon = icon("line-chart")),
-    menuItem("Summary table", tabName = "table", icon = icon("table")),
+    menuItem("Summary table", tabName = "table", icon = icon("table"), selected = TRUE),
     menuItem("About", tabName = "about", icon = icon("cog"))
   )
 )

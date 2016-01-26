@@ -21,7 +21,7 @@ observe({
   data$target.delta <- to_delta(to_ratio(target), ref_ratio = data$nat) # delta value
   
   # find spikes via weighted abundance (wab) 
-  init.wab <- abundance(rep(get_value(data$nat), nrow(data$iso_labels)), 
+  init.wab <- abundance(data$nat %>% to_ab() %>% get_value() %>% rep(nrow(data$iso_labels)), 
                         weight = input$label.ref_vol * input$label.ref_conc)
   
   # assign updated iso_labels data frame
@@ -29,7 +29,7 @@ observe({
     data$iso_labels %>% 
     mutate(
       spike.wab = abundance(spike/100, weight = vol * conc),
-      effective.wab = spike.wab + init.wab,
+      effective.wab = (spike.wab + init.wab) %>% set_attrib(minor = data$nat@isoname, major = data$nat@major),
       error = effective.wab <= data$target.ab
     )
 })

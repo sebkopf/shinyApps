@@ -42,20 +42,20 @@ label_time <- function(dblt, target, tracer, natural) {
 
 #' Isotopic enrichment as a function of labeling time, doubling time and strength of label
 #' 
-#' Formula: total = F_natural * exp(-p t) + F_spike * (1 - exp(-p t))
+#' Formula: total = F_natural * exp(-p t) + F_tracer * (1 - exp(-p t))
 #' 
 #' @param time labeling times, a vector of lubridate:::duration objects
 #' @param dblt doubling times, a vector of lubridate:::duration objects
-#' @param spike - strength of label, isotope value object (usually abundance but delta value works too)
+#' @param tracer - strength of label, isotope value object (usually abundance but delta value works too)
 #' @param natural - natural abundance (ratio or abundance)
-label_strength <- function(time, dblt, spike, natural) {
-  df <- expand.grid(time = time, dblt = dblt, spike.ab = to_ab(spike), natural.ab = to_ab(natural), stringsAsFactors = FALSE)
+label_strength <- function(time, dblt, tracer, natural) {
+  df <- expand.grid(time = time, dblt = dblt, tracer.ab = to_ab(tracer), natural.ab = to_ab(natural), stringsAsFactors = FALSE)
   mutate(df,
          time.label = duration_label(time), # add labels
          dblt.label = duration_label(dblt), # add labels
          p = log(2)/as.numeric(dblt), # specific growth rate
          decay = exp(-p * as.numeric(time)), # decay of old material
-         total.ab = quietly(set_attrib(weight(natural.ab, decay) + weight(spike.ab, 1 - decay), compound = "Sample")), # mass balance
+         total.ab = quietly(set_attrib(weight(natural.ab, decay) + weight(tracer.ab, 1 - decay), compound = "Sample")), # mass balance
          total.delta = to_delta(to_ratio(total.ab), ref_ratio = to_ratio(natural)) # permil value
   )
 }

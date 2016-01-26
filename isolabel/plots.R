@@ -45,3 +45,99 @@ generate_plot1 <- reactive({
     p <- p + theme(legend.position = "bottom") + guides(color = guide_legend(ncol=2,byrow=FALSE)) 
   return(p)
 })
+
+# rendering plot1
+output$plot <- renderPlot({
+  
+  # don't load right away (only after the controls on the left have loaded)
+  if (data$starting)
+    return(NULL)
+  
+  # don't load unless the right tab is selected
+  if (isolate(input$tabs) != "plot1")
+    return(NULL)
+  
+  withProgress(session, min=1, max=5, {
+    setProgress(message = 'Rendering plot ...')
+    setProgress(value = 2)
+    p <- generate_plot1()
+    setProgress(value = 4)
+    suppressWarnings(print(p))
+    setProgress(value = 5)
+  })
+},
+height = reactive({input$updatePlot1; isolate(input$main_plot_height)}))
+
+# saving plot 1
+output$save <- downloadHandler(
+  filename = function() { isolate(input$save_name) }, 
+  content = function(file) { 
+    device <- function(..., version="1.4") grDevices::pdf(..., version=version)
+    ggsave(file = file, plot = generate_plot1(), 
+           width = isolate(input$save_width), height = isolate(input$save_height), device = device)
+  })
+
+# plot2
+generate_plot2 <- reactive({
+  
+  if (is.null(data$plot2.df)) {
+    return(error_plot)
+  }
+  
+  if (isolate(input$plot2DataType) == "permil") {
+    ylab <- get_label(data$plot2.df$total.delta)
+    ylabeller <- function(x) format(x, big.mark = ",", scientific = FALSE)
+  } else {
+    ylab <- get_label(data$plot2.df$total.ab)
+    ylabeller <- function(x)  paste0(signif(100*x, 1), " at%")
+  }
+  
+  p <- 
+    data$plot2.df %>% 
+    ggplot()+
+    aes(x = as.numeric(time), y = enrichment, colour = DBLT) + 
+    geom_line(linetype=1) + 
+    scale_x_continuous("", breaks = function(limits) pretty(limits, 10), labels = duration_label) +
+    scale_y_continuous(ylab, label = ylabeller) +
+    scale_colour_manual("Generation time", values = brewer.pal(5, "Set1")) + 
+    facet_grid(~Spike) + 
+    theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(
+      text = element_text(size = 16),
+      legend.title.align = 0.5,
+      axis.text.x = element_text(angle = 60, hjust = 1)) +
+    coord_cartesian(
+      xlim = c(min(as.numeric(data$plot2.df$time)), max(as.numeric(data$plot2.df$time))),
+      ylim = c(min(data$plot2.df$enrichment), 
+               isolate(input$plot2Yzoom)/100*max(data$plot2.df$enrichment)))
+  
+  if (isolate(input$legend) == "below")
+    p <- p + theme(legend.position = "bottom") + guides(color = guide_legend(ncol=2,byrow=FALSE)) 
+  return(p)
+})
+
+# rendering plot2
+output$plot2 <- renderPlot({
+  # don't load unless the right tab is selected
+  if (isolate(input$tabs) != "plot2")
+    return(NULL)
+  
+  withProgress(session, min=1, max=5, {
+    setProgress(message = 'Rendering plot ...')
+    setProgress(value = 2)
+    p <- generate_plot2()
+    setProgress(value = 4)
+    suppressWarnings(print(p))
+    setProgress(value = 5)
+  })
+},
+height = reactive({input$updatePlot2; isolate(input$main_plot_height)}))
+
+# saving plot 2
+output$save2 <- downloadHandler(
+  filename = function() { isolate(input$save_name2) }, 
+  content = function(file) { 
+    device <- function(..., version="1.4") grDevices::pdf(..., version=version)
+    ggsave(file = file, plot = plot2Input(), 
+           width = isolate(input$save_width2), height = isolate(input$save_height2), device = device)
+  })
