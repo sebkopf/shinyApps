@@ -22,28 +22,27 @@ observe({
     shinyjs::hide("gen_editbox_div")
 })
 
-# save gen times entry
-observe({
-  if (is.na(input$dblt_edit_value) || is.na(input$dblt_edit_units) || is.na(input$dblt_edit_include)) return()
+# save gen times entry - this is an example of updating the table in JS, rather than letting the server do it
+# see iso_labels for an example where the server is doing all the updating
+update_gen_time_column <- function(value, var, table_col) {
   isolate({
-    data$gen_times[input$gen_times_rows_selected,"value"] <- input$dblt_edit_value
-    data$gen_times[input$gen_times_rows_selected,"units"] <- input$dblt_edit_units
-    data$gen_times[input$gen_times_rows_selected,"include"] <- if (input$dblt_edit_include) "yes" else "no"
-    with(data$gen_times[input$gen_times_rows_selected, ], {
-      shinyjs::runjs(
-        paste0(
-          "var table = $('#DataTables_Table_1').DataTable();",
-          "table.cell('.selected', 0).data(", value, ").draw();",
-          "table.cell('.selected', 1).data('", units, "').draw();",
-          "table.cell('.selected', 2).data('", include, "').draw();")
-      )
-    })
+    data$gen_times[input$gen_times_rows_selected, var] <- value
+    shinyjs::runjs(
+      paste0("$('#gen_times div table').DataTable().",
+      "cell('.selected', ", table_col, ").",
+      "data('", value, "').draw();")
+    )
   })
-})
+}
+
+observe(input$dblt_edit_value %>% update_gen_time_column("value", 0))
+observe(input$dblt_edit_units %>% update_gen_time_column("units", 1))
+observe( (if (input$dblt_edit_include) "yes" else "no") %>% update_gen_time_column("include", 2))
+
 
 # gen times table
 output$gen_times <- DT::renderDataTable({
-  datatable(isolate(data$gen_times), 
+  datatable(isolate(data$gen_times), # isolated here because we want only JS to update the data table, not server
             rownames = FALSE, filter = 'none',  selection = "single",
             options = list(
               columnDefs = list(list(className = 'dt-center', targets = 0:2)), # center cols

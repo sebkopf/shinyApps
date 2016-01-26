@@ -7,13 +7,14 @@ source("widgets.R")
 
 header <- dashboardHeader(title = "Isotope calculator")
 
+
 ##### SIDEBAR ######
 
 sidebar <- dashboardSidebar(
   sidebarMenu( id = "tabs",
-    menuItem("Labeling times", tabName = "plot1", icon = icon("clock-o"), selected = FALSE),
+    menuItem("Labeling times", tabName = "plot1", icon = icon("clock-o"), selected = TRUE),
     menuItem("Enrichment curves", tabName = "plot2", icon = icon("line-chart")),
-    menuItem("Summary table", tabName = "table", icon = icon("table"), selected = TRUE),
+    menuItem("Summary table", tabName = "table", icon = icon("table")),
     menuItem("About", tabName = "about", icon = icon("cog"))
   )
 )
@@ -184,19 +185,22 @@ body <- dashboardBody(
                htmlOutput("iso_labels_error"),
                tags$style(type="text/css", HTML("#iso_labels_error {color: #f50000;}")),
                DT::dataTableOutput('iso_labels'),
-               
-               
-               label_picker(vols = c(1, 5, 10), concs = c(1, 1, 1), strengths = c(50, 50, 99))
-               
-               
-               
+               shinyjs::hidden(
+                 div(id = "iso_labels_editbox_div",
+                     h4("Edit isotope label"),
+                     checkboxInput("iso_label_edit_include", "include in plots and tables"),
+                     generate_input_row("iso_label_edit_vol", "Volume:", value = 1, step = 1, min = 0), 
+                     generate_input_row("iso_label_edit_conc", "Concentration:", value = 1, step = 0.1, min = 0),
+                     sliderInput("iso_label_edit_spike", NULL, min = 0, max = 100, step = 1, value = 1, post = " at%")
+                 )
+               )
            ),
            
            
            ### generation times ###
            
            box(title = "Generation times", 
-               solidHeader = TRUE, collapsible = TRUE, status = "danger", collapsed = TRUE, width = 12,
+               solidHeader = TRUE, collapsible = TRUE, status = "danger", collapsed = FALSE, width = 12,
                DT::dataTableOutput('gen_times'),
                shinyjs::hidden(
                  div(id = "gen_editbox_div",

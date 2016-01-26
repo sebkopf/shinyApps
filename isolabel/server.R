@@ -37,12 +37,15 @@ shinyServer(function(input, output, session) {
         stringsAsFactors = FALSE,
         check.names = FALSE
       ),
+      iso_label_selected = NULL,
       
       nat = NA,
       target.ab = NA,
       target.delta = NA,
       
-      plot1.df = NA
+      plot1.df = NULL,
+      plot2.df = NULL,
+      table.df = NULL
     )
     
     # Generation times ----------------------------------------------
@@ -53,8 +56,34 @@ shinyServer(function(input, output, session) {
     source("iso_labels.R", local = TRUE)
     
     
-    
     # Main inputs processing ------------------------------------------------
+    observe({
+      
+      # find target
+      data$nat <- get_standard(minor = input$ref)
+      if (input$targetType == 'permil')
+        target <- delta(input$intensity_permil, ref_ratio = data$nat)
+      else 
+        target <- abundance(input$intensity_F/100)
+      target <- set_attrib(target, minor = data$nat@isoname, major = data$nat@major) # set isotope names
+      data$target.ab <- to_ab(to_ratio(target)) # abundance value
+      data$target.delta <- to_delta(to_ratio(target), ref_ratio = data$nat) # delta value
+      
+      # find spikes via weighted abundance (wab) 
+      init.wab <- abundance(data$nat %>% to_ab() %>% get_value() %>% rep(nrow(data$iso_labels)), 
+                            weight = input$label.ref_vol * input$label.ref_conc)
+      
+      # assign updated iso_labels data frame
+      data$iso_labels <-
+        data$iso_labels %>% 
+        mutate(
+          spike.wab = abundance(spike/100, weight = vol * conc),
+          effective.wab = (spike.wab + init.wab) %>% set_attrib(minor = data$nat@isoname, major = data$nat@major),
+          error = effective.wab <= data$target.ab
+        )
+    })
+    
+    # Main plot/table data generation ------------------------------------------------
     observe(
       withProgress(session, min=1, max=5, {
         setProgress(message = 'Calculating ...')

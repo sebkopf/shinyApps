@@ -10,7 +10,7 @@ output$table <- renderTable({
     setProgress(value = 4)
     return(data$table.df)
   })
-}, digits = 0, include.rownames = F, align = rep('r', ncol(data$table.df) + 1))
+}, digits = 0, include.rownames = F)
 
 # saving table 
 output$save3 <- downloadHandler(
