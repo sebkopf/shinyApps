@@ -60,6 +60,7 @@ shinyServer(function(input, output, session) {
       input$updatePlot2 # update button pressed
       input$updateTable # update button pressed
       input$tableDataType # simple notation trigger also instantaneous
+      input$plot2DataType # simple notation trigger also instantaneous
       
       isolate({
         data$plot1.df <- NULL

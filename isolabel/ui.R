@@ -75,6 +75,10 @@ body <- dashboardBody(
                            bsTooltip("downloadPlot2", "Download the plot as a PDF")
                        ),
                        status = "primary", solidHeader = TRUE, width = 12,
+                       radioButtons(
+                         "plot2DataType", "",
+                         c(`Enrichment [in permil]` = "permil",
+                           `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
                        plotOutput("plot2", height = "100%"))
              ),
                   
@@ -140,11 +144,6 @@ body <- dashboardBody(
                      sliderInput("plot2Yzoom", "Y-axis (enrichment) zoom:",
                                  min = 0.1, max = 100, step = 0.1, value = 100, 
                                  post = "%"),
-                     
-                     radioButtons(
-                       "plot2DataType", "",
-                       c(`Enrichment [in permil]` = "permil",
-                         `Total abundance [at% rare isotope]` = "frac"), selected="permil"),
                      
                      sliderInput("plot2Xzoom", "X-axis (time scale) zoom:",
                                  min = 0.1, max = 100, step = 0.1, value = 100, 
