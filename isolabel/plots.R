@@ -138,6 +138,6 @@ output$save2 <- downloadHandler(
   filename = function() { isolate(input$save_name2) }, 
   content = function(file) { 
     device <- function(..., version="1.4") grDevices::pdf(..., version=version)
-    ggsave(file = file, plot = plot2Input(), 
+    ggsave(file = file, plot = generate_plot2(), 
            width = isolate(input$save_width2), height = isolate(input$save_height2), device = device)
   })

@@ -15,5 +15,5 @@ output$table <- renderTable({
 # saving table 
 output$save3 <- downloadHandler(
   filename = function() { isolate(input$save_name3) },
-  content = function(file) { write.csv(datasetInput()$table.df, file = file) }
+  content = function(file) { write.csv(data$table.df, file = file) }
 )
