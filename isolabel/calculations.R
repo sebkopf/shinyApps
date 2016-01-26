@@ -1,5 +1,3 @@
-
-
 #' Isotopia options
 set_iso_opts(
   default_delta_notation = "permil",
@@ -18,26 +16,26 @@ duration_label <- function(ds) {
 
 #' Labeling time as function of doubling time, desired isotopic enrichment and strength of label
 #' 
-#' Formula: label_time = dblt / log(2) * log [(F_spike - F_natural) / (F_spike - F_target)]
+#' Formula: label_time = dblt / log(2) * log [(F_tracer - F_natural) / (F_tracer - F_target)]
 #' 
 #' @param dblt doubling times - a vector of lubridate:::duration objects
 #' @param target enrichment - an isotope value object (usually abundance or delta value) 
-#' @param spike - strength of label, another isotope value object (usually abundance but delta value works too)
+#' @param tracer - strength of label, another isotope value object (usually abundance but delta value works too)
 #' @param natural - natural abundance (ratio or abundance)
-#' @return data frame with input columns and additional columns target.ab, spike.ab (the abundance objects) and labeling_time
-#' @note the conversion to an abundance value if coming from delta target or spike requires
+#' @return data frame with input columns and additional columns target.ab, tracer.ab (the abundance objects) and labeling_time
+#' @note the conversion to an abundance value if coming from delta target or tracer requires
 #' the delta values to have their ref_ratio set (or the standard registered) and is only 100%
 #' accurate in 2 isotope systems (othewise some error introduced when converting ratio to abundance
 #' without taking the other minor isotopes into consideration)
-label_time <- function(dblt, target, spike, natural) {
-  df <- expand.grid(dblt = dblt, target = target, spike = spike, natural = natural, stringsAsFactors = FALSE)
+label_time <- function(dblt, target, tracer, natural) {
+  df <- expand.grid(dblt = dblt, target = target, tracer = tracer, natural = natural, stringsAsFactors = FALSE)
   df <- mutate(df, 
                dblt.label = duration_label(dblt), # add labels
                target.ab = to_ab(target), # convert to abundance 
-               spike.ab = to_ab(spike), # convert to abundance
+               tracer.ab = to_ab(tracer), # convert to abundance
                natural.ab = to_ab(natural), # convert to abundance
                labeling_time = as.numeric(dblt)/log(2) * 
-                 log((get_value(spike.ab) - get_value(natural.ab)) / (get_value(spike.ab) - get_value(target.ab))), # calculate label time
+                 log((get_value(tracer.ab) - get_value(natural.ab)) / (get_value(tracer.ab) - get_value(target.ab))), # calculate label time
                labeling_time.label = duration_label(labeling_time)) # label
   df
 }

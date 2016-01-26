@@ -14,14 +14,14 @@ source("calculations.R")
 shinyServer(function(input, output, session) {
     
     # Delayed rendering --------------
-    values <- reactiveValues(starting = TRUE)
     session$onFlushed(function() {
-        values$starting <- FALSE
+        data$starting <- FALSE
     })
     
     # Data fields --------------
-    
     data <- reactiveValues(
+      starting = TRUE,
+      
       gen_times = data.frame(
         value = c(1, 1, 1, 1, 10),
         units = c("hour", "day", "month", "year", "year"),
@@ -32,141 +32,147 @@ shinyServer(function(input, output, session) {
       iso_labels = data.frame(
         vol = c(1, 5, 10), 
         conc = c(1, 1, 1), 
-        tracer = c(50, 50, 99),
+        spike = c(50, 50, 99),
         include = "yes",
         stringsAsFactors = FALSE,
         check.names = FALSE
       ),
       
-      iso_ref = NA,
+      nat = NA,
       target.ab = NA,
-      target.delta = NA
+      target.delta = NA,
+      
+      plot1.df = NA
     )
     
     # Generation times --------------
-    
-    # hide/show gen times edit box
-    observe({
-      if (length(input$gen_times_rows_selected) > 0)  {
-        with(data$gen_times[input$gen_times_rows_selected, ], {
-          updateTextInput(session, "dblt_edit_value", value = value)
-          updateSelectInput(session, "dblt_edit_units", selected = units)
-          updateCheckboxInput(session, "dblt_edit_include", value = include == "yes")
-        })
-        shinyjs::show("gen_editbox_div")
-      } else
-        shinyjs::hide("gen_editbox_div")
-    })
-    
-    # save gen times entry
-    observe({
-      if (is.na(input$dblt_edit_value) || is.na(input$dblt_edit_units) || is.na(input$dblt_edit_include)) return()
-      isolate({
-        data$gen_times[input$gen_times_rows_selected,"value"] <- input$dblt_edit_value
-        data$gen_times[input$gen_times_rows_selected,"units"] <- input$dblt_edit_units
-        data$gen_times[input$gen_times_rows_selected,"include"] <- if (input$dblt_edit_include) "yes" else "no"
-        with(data$gen_times[input$gen_times_rows_selected, ], {
-          shinyjs::runjs(
-            paste0(
-              "var table = $('#DataTables_Table_1').DataTable();",
-              "table.cell('.selected', 0).data(", value, ").draw();",
-              "table.cell('.selected', 1).data('", units, "').draw();",
-              "table.cell('.selected', 2).data('", include, "').draw();")
-          )
-        })
-      })
-    })
-    
-    # gen times table
-    output$gen_times <- DT::renderDataTable({
-      datatable(isolate(data$gen_times), 
-                rownames = FALSE, filter = 'none',  selection = "single",
-                options = list(
-                  columnDefs = list(list(className = 'dt-center', targets = 0:2)), # center cols
-                  pageLength = nrow(isolate(data$gen_times)), autoWidth = TRUE, dom = "t", ordering = FALSE)
-      )
-    }, server = FALSE)
+    source("gen_times.R", local = TRUE)
     
     
     # Isotope labels --------------
-    
-    # 
-    
-    
-    # isolabels table
-    output$iso_labels <- DT::renderDataTable({
-      tracer_label <- paste0("tracer [at% ", data$iso_ref@isoname, "]")
-      effective_label <- paste0("effective [at% ", data$iso_ref@isoname, "]")
-      datatable(data$iso_labels %>% 
-                  dplyr::select(vol, conc, tracer = tracer.wab, effective = spike.wab, include) %>% 
-                  dplyr::mutate(
-                    tracer = tracer %>% get_value("percent") %>% signif(3),
-                    effective = effective %>% get_value("percent") %>% signif(3)) %>% 
-                  dplyr::rename_(.dots = list("tracer", "effective") %>% 
-                                   setNames(c(tracer_label, effective_label))), 
-                rownames = FALSE, filter = 'none',  selection = "single",
-                options = list(
-                  columnDefs = list(list(className = 'dt-center', targets = 0:4)), # center cols
-                  pageLength = nrow(data$iso_labels), autoWidth = TRUE, dom = "t", ordering = FALSE)
-      ) %>% 
-        # highlight effective tracers that are not high enough for the target enrichment
-        formatStyle(
-          effective_label,
-          color = styleInterval(data$target.ab %>% get_value("percent") %>% signif(3), c('red', 'black'))
-        )
-    }, server = FALSE)
+    source("iso_labels.R", local = TRUE)
     
     
     # Inputs processing ------------------------------------------------
     
-    # doubling times
-    get_doubling_times <- reactive({
-      data$gen_times %>% 
-        dplyr::filter(include == "yes") %>% 
-        dplyr::distinct() %>% 
-        dplyr::group_by_(.dots = names(data$gen_times)) %>% 
-        dplyr::mutate(
-          dblt = duration(as.integer(value), units), 
-          label = paste0(value, " ", units, if(value > 1) "s"))
-    })
-    
-    # reference, iso target and label strengths
+    # data frame for plot 1
     observe({
+      input$tabs # reload when new tab is selected
+      input$updatePlot1 # update button pressed
       
-      # find target
-      data$iso_ref <- get_standard(minor = input$ref)
-      if (input$targetType == 'permil')
-        target <- delta(input$intensity_permil, ref_ratio = data$iso_ref)
-      else 
-        target <- abundance(input$intensity_F/100)
-      target <- set_attrib(target, minor = data$iso_ref@isoname, major = data$iso_ref@major) # set isotope names
-      data$target.ab <- to_ab(to_ratio(target)) # abundance value
-      data$target.delta <- to_delta(to_ratio(target), ref_ratio = data$iso_ref) # delta value
-      
-      # find spikes via weighted abundance (wab) 
-      init.wab <- abundance(rep(get_value(data$iso_ref), nrow(data$iso_labels)), 
-                                weight = input$label.ref_vol * input$label.ref_conc)
-      
-      data$iso_labels <-
-        data$iso_labels %>% 
-        mutate(
-          tracer.wab = abundance(tracer/100, weight = vol * conc),
-          spike.wab = tracer.wab + init.wab,
-          error = spike.wab <= data$target.ab
-        )
-      
+      isolate({
+        data$plot1.df <- NA
+        
+        # checks
+        if (nrow(get_iso_labels()) == 0) return() # no label is strong enough or excluded because of error
+        if (nrow(get_doubling_times()) == 0) return() # no doubling times selected
+ 
+        data$plot1.df <- label_time(
+          dblt = get_doubling_times()$dblt, 
+          target = data$target.ab, 
+          tracer = get_iso_labels()$effective.wab,
+          natural = data$nat) %>% 
+          merge(get_iso_labels(), by.x = "tracer.ab", by.y = "effective.wab") %>% 
+          mutate(Label = factor(Label, levels = get_iso_labels()$Label))
+
+        
+#         # data table for enrichment curves
+#         plot2.df <- label_strength(
+#           time = duration(c(1, seq(0, max(plot.df$labeling_time) * input$plot2Xzoom/100, length.out = 50)), "seconds"), 
+#           dblt = dblts$dblt, 
+#           spike = data$spikes[show],
+#           natural = data$nat)
+#         
+#         # merge with user defined dblts and define factors and reporting format depending on request
+#         plot2.df <- merge(plot2.df, dblts[c("dblt", "label")], by = 'dblt')
+#         plot2.df <- merge(plot2.df, spikes.df, by.x = "spike.ab", by.y = "spikes")
+#         plot2.df <- mutate(plot2.df,
+#                            DBLT = factor(label, levels = dblts$label),
+#                            Spike = factor(Label, levels = spikes.df$Label),
+#                            enrichment = get_value(if(input$plot2DataType == "permil") total.delta else total.ab))
+#         
+#         # enrichment for table
+#         table.df <- data.frame()
+#         for (i in 1:length(data$spikes[show])) {
+#           ispike <- data$spikes[show][i]
+#           df <- subset(plot.df, spike.ab == ispike)
+#           table.df <- rbind(table.df, 
+#                             label_strength(
+#                               time = duration(df$labeling_time, "seconds"), 
+#                               dblt = duration(df$dblt, "seconds"), 
+#                               spike = to_abundance(ispike),
+#                               natural = data$nat)
+#           )
+#         }
+#         
+#         # merge with labels and spikes
+#         table.df <- merge(table.df, mutate(dblts, label = paste(label, "doubling"))[c("dblt", "label")], by = 'dblt')
+#         table.df <- merge(table.df, spikes.df[c("spikes", "Label")], by.x = "spike.ab", by.y = "spikes")
+#         
+#         # adjust headers
+#         table.df <- mutate(
+#           table.df, 
+#           `Incubation time [s]` = as.numeric(time), 
+#           `Incubation time` = time.label)
+#         
+#         if (input$tableDataType == "permil") {
+#           table.df$enrichment <- signif(get_value(table.df$total.delta), 2) 
+#         } else {
+#           table.df$enrichment <- paste0(signif(get_value(table.df$total.ab, "percent"), 2)) 
+#         }
+#         
+#         # cast 
+#         table.df <- dcast(table.df, `Label` + `Incubation time [s]` + `Incubation time` ~ label, value.var = "enrichment" )
+#         header_order <- match(paste(dblts$label, "doubling"), names(table.df))
+#         table.df <- table.df[c(1,3,header_order)]
+#         
+#         return(c(
+#           dblts, data, list(plot.df = plot.df, plot2.df = plot2.df, table.df = table.df)))
+      })
     })
     
-    # labeling strengths
-    get_labeling_strengths <- reactive({
-      message("getting labeling strengths, ref and target:")
-      print(data$iso_ref)
-      print(data$target.ab)
-      print(data$target.delta)
-      print(data$iso_labels %>% as.list())
-      message("end of getting labeling strengths")
-      data$iso_labels
+    
+    source("plots.R", local = TRUE)
+    
+    
+    
+    
+    # plot
+    plot2Input <- reactive({
+      data <- datasetInput()
+      
+      # only update if datasetInput changed
+      p <- isolate({
+        if (input$plot2DataType == "permil") {
+          ylab <- get_label(data$plot2.df$total.delta)
+          ylabeller <- function(x) format(x, big.mark = ",", scientific = FALSE)
+        } else {
+          ylab <- get_label(data$plot2.df$total.ab)
+          ylabeller <- function(x)  paste0(signif(100*x, 1), " at%")
+        }
+        
+        ggplot(data$plot2.df,
+               aes(x = as.numeric(time), y = enrichment, colour = DBLT)) + 
+          geom_line(linetype=1) + 
+          scale_x_continuous("", breaks = function(limits) pretty(limits, 10), labels = duration_label) +
+          scale_y_continuous(ylab, label = ylabeller) +
+          scale_colour_manual("Generation time", values = brewer.pal(5, "Set1")) + 
+          facet_grid(~Spike) + 
+          theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+          theme(
+            text = element_text(size = 16),
+            legend.title.align = 0.5,
+            axis.text.x = element_text(angle = 60, hjust = 1)) +
+          coord_cartesian(
+            xlim = c(min(as.numeric(data$plot2.df$time)), max(as.numeric(data$plot2.df$time))),
+            ylim = c(min(data$plot2.df$enrichment), input$plot2Yzoom/100*max(data$plot2.df$enrichment)))
+      })
+      if (isolate(input$legend) == "below")
+        p <- p + theme(legend.position = "bottom") + guides(color = guide_legend(ncol=2,byrow=FALSE)) 
+      return(p)
     })
+    
+    
     
     # labeling strengths
     labelsInput <- reactive({
@@ -174,7 +180,6 @@ shinyServer(function(input, output, session) {
         
         # natural abundance reference 
         data$nat <- get_standard(minor = input$ref)
-        #get_labeling_strengths()
         
         # target enrichment
         if (input$targetType == 'permil')
@@ -307,77 +312,6 @@ shinyServer(function(input, output, session) {
         shinyjs::hide("plot_settings_div")
     })
     
-    # plot1
-    plotInput <- reactive({
-        data <- datasetInput() 
-        
-        # only update if datasetInput changed
-        p <- isolate({
-          ggplot(data$plot.df,
-                 aes(x = dblt, y = labeling_time, fill = Label, colour = Label)) + 
-            geom_segment(aes(x=0, xend=dblt, y=labeling_time, yend=labeling_time), 
-                         arrow=arrow(length=unit(0.4,"cm"), ends="first", type="open", 
-                                     angle=15), linetype=2) + 
-            geom_segment(aes(x=dblt, xend=dblt, y=0, yend=labeling_time), 
-                         arrow=arrow(length=unit(0.4,"cm"), type="open", angle=15), 
-                         linetype=2) + 
-            geom_line(linetype=1) + geom_point(colour="black", shape = 21, size=4) +
-            scale_y_log10("labeling time",
-                          expand = c(0, 0.1), breaks = unique(data$plot.df$labeling_time), 
-                          labels = unique(data$plot.df$labeling_time.label)) + 
-            scale_x_log10("generation time", expand = c(0, 0.2), breaks = data$dblt, 
-                          labels = data$label) + 
-            scale_fill_manual("Isotope spike", values = brewer.pal(3, "Set1")) +
-            scale_color_manual("Isotope spike", values = brewer.pal(3, "Set1")) +
-            labs(title = paste0("Required labeling times for enrichment to:\n", 
-                                get_label(data$target.ab), " = ", signif(get_value(data$target.ab, "percent"), 3), " at% / ",
-                                get_name(data$target.delta), " = ", round(get_value(data$target.delta)), " ", isotopia:::get_units(data$target.delta))) + 
-            theme_bw() + 
-            theme(panel.grid.major = element_blank(), 
-                  panel.grid.minor = element_blank(),
-                  legend.title.align = 0.5,
-                  text = element_text(size = 16)) +
-            guides(fill = guide_legend(title.position = "top", nrow = 3)) 
-        })
-        if (isolate(input$legend) == "below")
-          p <- p + theme(legend.position = "bottom") + guides(color = guide_legend(ncol=2,byrow=FALSE)) 
-        return(p)
-    })
-    
-    # plot
-    plot2Input <- reactive({
-        data <- datasetInput()
-        
-        # only update if datasetInput changed
-        p <- isolate({
-            if (input$plot2DataType == "permil") {
-                ylab <- get_label(data$plot2.df$total.delta)
-                ylabeller <- function(x) format(x, big.mark = ",", scientific = FALSE)
-            } else {
-                ylab <- get_label(data$plot2.df$total.ab)
-                ylabeller <- function(x)  paste0(signif(100*x, 1), " at%")
-            }
-          
-            ggplot(data$plot2.df,
-                   aes(x = as.numeric(time), y = enrichment, colour = DBLT)) + 
-                geom_line(linetype=1) + 
-                scale_x_continuous("", breaks = function(limits) pretty(limits, 10), labels = duration_label) +
-                scale_y_continuous(ylab, label = ylabeller) +
-                scale_colour_manual("Generation time", values = brewer.pal(5, "Set1")) + 
-                facet_grid(~Spike) + 
-                theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
-                theme(
-                    text = element_text(size = 16),
-                    legend.title.align = 0.5,
-                    axis.text.x = element_text(angle = 60, hjust = 1)) +
-                coord_cartesian(
-                   xlim = c(min(as.numeric(data$plot2.df$time)), max(as.numeric(data$plot2.df$time))),
-                   ylim = c(min(data$plot2.df$enrichment), input$plot2Yzoom/100*max(data$plot2.df$enrichment)))
-        })
-        if (isolate(input$legend) == "below")
-          p <- p + theme(legend.position = "bottom") + guides(color = guide_legend(ncol=2,byrow=FALSE)) 
-        return(p)
-    })
     
     
     
@@ -450,7 +384,7 @@ shinyServer(function(input, output, session) {
     output$plot <- renderPlot({
       
         # don't load right away (only after the controls on the left have loaded)
-        if (values$starting)
+        if (data$starting)
             return(NULL)
         
         # don't load unless the right tab is selected
@@ -460,7 +394,7 @@ shinyServer(function(input, output, session) {
         withProgress(session, min=1, max=5, {
             setProgress(message = 'Rendering plot ...')
             setProgress(value = 2)
-            p <- plotInput()
+            p <- generate_plot1()
             setProgress(value = 4)
             suppressWarnings(print(p))
             setProgress(value = 5)
@@ -490,7 +424,7 @@ shinyServer(function(input, output, session) {
       filename = function() { isolate(input$save_name) }, 
       content = function(file) { 
         device <- function(..., version="1.4") grDevices::pdf(..., version=version)
-        ggsave(file = file, plot = plotInput(), 
+        ggsave(file = file, plot = generate_plot1(), 
                width = isolate(input$save_width), height = isolate(input$save_height), device = device)
       })
     
