@@ -24,18 +24,20 @@ An online version is available [here](https://sebkopf.shinyapps.io/isolabel/) an
 ### Run locally
 To run the shiny app locally you need to install the following packages:
 ```coffee
-packages <- c("shiny", "ggplot2", "reshape2", "lubridate", 
-              "stringr", "devtools", "plyr", "RColorBrewer")
+packages <- c(
+  "shiny", "shinydashboard", "shinyBS", "shinyjs", "DT",
+  "lubridate", "stringr", "devtools", 
+  "reshape2", "plyr", "magrittr", "dplyr",
+  "ggplot2", "RColorBrewer")
 install.packages(packages, depen=T)
-library(devtools)
-devtools::install_github("isotopia", "sebkopf", "v0.4")
+devtools::install_github("isotopia", "sebkopf", "v0.4.1")
 ```
 
 #### Run locally from GitHub
 Now you can just run the app either directly from GitHub (most convenient and always up to date):
 ```coffee
 library(shiny)
-runGitHub("shinyApps", "sebkopf", subdir = "isolabel")
+runGitHub("sebkopf/shinyApps", subdir = "isolabel")
 ```
 
 #### Run local copy
