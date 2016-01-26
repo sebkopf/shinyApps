@@ -1,12 +1,3 @@
-# doubling time picking
-dblt_picker <- function(i, value = 1, unit = c("minute", "hour", "day", "week", "month", "year")) {
-  unit <- match.arg(unit)
-  units <- eval(formals(dblt_picker)$unit, list())
-  fluidRow(
-    column(3, numericInput(paste0("dblt", i), "", value, min = 1, step = 1)),
-    column(6, offset = 1, selectInput(paste0("dblt", i, "_units"), "", choices = units, selected = unit))
-  )
-}
 
 # label strengths selection
 label_picker <- function(vols, concs, strengths) {

@@ -171,14 +171,15 @@ body <- dashboardBody(
                shinyjs::hidden(
                  div(id = "gen_editbox_div",
                      h4("Edit generation time"),
-                     dblt_picker("_edit", unit = "hour")
+                     checkboxInput("dblt_edit_include", "include in plots and tables"),
+                     fluidRow(
+                       column(4, offset = 1, numericInput("dblt_edit_value", NULL, 1, min = 1, step = 1)),
+                       column(6, offset = 0, selectInput(
+                         "dblt_edit_units", NULL, selected = "",
+                         choices = c("minute", "hour", "day", "week", "month", "year")))
+                     )
                  )
-               ),
-               dblt_picker(1, unit = "hour"),
-               dblt_picker(2, unit = "day"),
-               dblt_picker(3, unit = "month"),
-               dblt_picker(4, unit = "year"),
-               dblt_picker(5, value = 10, unit = "year")
+               )
            ),
            
            box(title = "Isotope labels", 

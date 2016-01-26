@@ -7,12 +7,13 @@ library(grid)
 library(plyr)
 library(reshape2)
 library(RColorBrewer)
+library(magrittr)
 
 source("calculations.R")
 
 shinyServer(function(input, output, session) {
     
-    # Delayed rendering
+    # Delayed rendering --------------
     values <- reactiveValues(starting = TRUE)
     session$onFlushed(function() {
         values$starting <- FALSE
@@ -23,7 +24,7 @@ shinyServer(function(input, output, session) {
     data <- reactiveValues(
       gen_times = data.frame(
         value = c(1, 1, 1, 1, 10),
-        unit = c("hour", "day", "month", "year", "year"),
+        units = c("hour", "day", "month", "year", "year"),
         include = "yes",
         stringsAsFactors = FALSE
       )
@@ -32,10 +33,11 @@ shinyServer(function(input, output, session) {
     # hide/show gen times edit box
     observe({
       if (length(input$gen_times_rows_selected) > 0)  {
-        updateTextInput(session, "dblt_edit", 
-                        value = data$gen_times[input$gen_times_rows_selected,"value"])
-        updateSelectInput(session, "dblt_edit_units", 
-                          selected = data$gen_times[input$gen_times_rows_selected,"unit"])
+        with(data$gen_times[input$gen_times_rows_selected, ], {
+          updateTextInput(session, "dblt_edit_value", value = value)
+          updateSelectInput(session, "dblt_edit_units", selected = units)
+          updateCheckboxInput(session, "dblt_edit_include", value = include == "yes")
+        })
         shinyjs::show("gen_editbox_div")
       } else
         shinyjs::hide("gen_editbox_div")
@@ -43,16 +45,20 @@ shinyServer(function(input, output, session) {
     
     # save gen times entry
     observe({
-      if (is.na(input$dblt_edit) || is.na(input$dblt_edit_units)) return()
+      if (is.na(input$dblt_edit_value) || is.na(input$dblt_edit_units) || is.na(input$dblt_edit_include)) return()
       isolate({
-        data$gen_times[input$gen_times_rows_selected,"value"] <- input$dblt_edit
-        data$gen_times[input$gen_times_rows_selected,"unit"] <- input$dblt_edit_units
-        shinyjs::runjs(
-          paste0(
-            "var table = $('#DataTables_Table_0').DataTable();",
-            "table.cell('.selected', 0).data(", input$dblt_edit, ").draw();",
-            "table.cell('.selected', 1).data('", input$dblt_edit_units, "').draw();")
-        )
+        data$gen_times[input$gen_times_rows_selected,"value"] <- input$dblt_edit_value
+        data$gen_times[input$gen_times_rows_selected,"units"] <- input$dblt_edit_units
+        data$gen_times[input$gen_times_rows_selected,"include"] <- if (input$dblt_edit_include) "yes" else "no"
+        with(data$gen_times[input$gen_times_rows_selected, ], {
+          shinyjs::runjs(
+            paste0(
+              "var table = $('#DataTables_Table_0').DataTable();",
+              "table.cell('.selected', 0).data(", value, ").draw();",
+              "table.cell('.selected', 1).data('", units, "').draw();",
+              "table.cell('.selected', 2).data('", include, "').draw();")
+          )
+        })
       })
     })
     
@@ -60,7 +66,9 @@ shinyServer(function(input, output, session) {
     output$gen_times <- DT::renderDataTable({
       datatable(isolate(data$gen_times), 
                 rownames = FALSE, filter = 'none',  selection = "single",
-                options = list(pageLength = nrow(isolate(data$gen_times)), autoWidth = TRUE, dom = "t", ordering = FALSE)
+                options = list(
+                  columnDefs = list(list(className = 'dt-center', targets = 0:2)), # center cols
+                  pageLength = nrow(isolate(data$gen_times)), autoWidth = TRUE, dom = "t", ordering = FALSE)
       )
     }, server = FALSE)
     
@@ -68,24 +76,14 @@ shinyServer(function(input, output, session) {
     # Inputs processing ------------------------------------------------
     
     # doubling times
-    dbltsInput <- reactive({
-        # find doubling times to plot
-        dblts <- c()
-        dblts.labels <- c()
-        
-        for (i in 1:5) { 
-            if (paste0("dblt", i) %in% names(input)) {
-                value <- input[[paste0("dblt", i)]]
-                unit <- paste0(c(input[[paste0("dblt", i, "_units")]]), if (value > 1) "s")
-                dblt <- duration(as.integer(value), unit)
-                if (! (dblt %in% dblts) ) { # only take unique dblts
-                    dblts <- c(dblts, dblt)
-                    dblts.labels <- c(dblts.labels, paste(value, unit))
-                }
-            } else 
-                break
-        }
-        list(dblts = dblts, dblts.labels = dblts.labels)
+    get_doubling_times <- reactive({
+      data$gen_times %>% 
+        dplyr::filter(include == "yes") %>% 
+        dplyr::distinct() %>% 
+        dplyr::group_by_(.dots = names(data$gen_times)) %>% 
+        dplyr::mutate(
+          dblt = duration(as.integer(value), units), 
+          label = paste0(value, " ", units, if(value > 1) "s"))
     })
     
     # labeling strengths
@@ -133,7 +131,7 @@ shinyServer(function(input, output, session) {
         # Most of this heavy lifting for doing the calculations is isolated so that it only gets run triggered when any of 
         # the above changes (none of the settings on the left)
         isolate({
-            dblts <- dbltsInput()
+            dblts <- get_doubling_times()
             data <- labelsInput()
             
             # labels
@@ -151,7 +149,7 @@ shinyServer(function(input, output, session) {
             
             # labeling times for plot
             plot.df <- label_time(
-                dblt = dblts$dblts, 
+                dblt = dblts$dblt, 
                 target = data$target.ab, 
                 spike = data$spikes[show],
                 natural = data$nat)
@@ -161,15 +159,15 @@ shinyServer(function(input, output, session) {
             # data table for enrichment curves
             plot2.df <- label_strength(
                 time = duration(c(1, seq(0, max(plot.df$labeling_time) * input$plot2Xzoom/100, length.out = 50)), "seconds"), 
-                dblt = dblts$dblts, 
+                dblt = dblts$dblt, 
                 spike = data$spikes[show],
                 natural = data$nat)
             
             # merge with user defined dblts and define factors and reporting format depending on request
-            plot2.df <- merge(plot2.df, data.frame(dblt = dblts$dblts, dblt.userlabel = dblts$dblts.labels), by = 'dblt')
+            plot2.df <- merge(plot2.df, dblts[c("dblt", "label")], by = 'dblt')
             plot2.df <- merge(plot2.df, spikes.df, by.x = "spike.ab", by.y = "spikes")
             plot2.df <- mutate(plot2.df,
-                DBLT = factor(dblt.userlabel, levels = dblts$dblts.labels),
+                DBLT = factor(label, levels = dblts$label),
                 Spike = factor(Label, levels = spikes.df$Label),
                 enrichment = get_value(if(input$plot2DataType == "permil") total.delta else total.ab))
             
@@ -188,7 +186,7 @@ shinyServer(function(input, output, session) {
             }
             
             # merge with labels and spikes
-            table.df <- merge(table.df, data.frame(dblt = dblts$dblts, dblt.userlabel = paste0(dblts$dblts.labels, " doubling")), by = 'dblt')
+            table.df <- merge(table.df, mutate(dblts, label = paste(label, "doubling"))[c("dblt", "label")], by = 'dblt')
             table.df <- merge(table.df, spikes.df[c("spikes", "Label")], by.x = "spike.ab", by.y = "spikes")
             
             # adjust headers
@@ -204,8 +202,8 @@ shinyServer(function(input, output, session) {
             }
             
             # cast 
-            table.df <- dcast(table.df, `Label` + `Incubation time [s]` + `Incubation time` ~ dblt.userlabel, value.var = "enrichment" )
-            header_order <- match(paste0(dblts$dblts.labels, " doubling"), names(table.df))
+            table.df <- dcast(table.df, `Label` + `Incubation time [s]` + `Incubation time` ~ label, value.var = "enrichment" )
+            header_order <- match(paste(dblts$label, "doubling"), names(table.df))
             table.df <- table.df[c(1,3,header_order)]
             
             return(c(
@@ -241,8 +239,8 @@ shinyServer(function(input, output, session) {
             scale_y_log10("labeling time",
                           expand = c(0, 0.1), breaks = unique(data$plot.df$labeling_time), 
                           labels = unique(data$plot.df$labeling_time.label)) + 
-            scale_x_log10("generation time", expand = c(0, 0.2), breaks = data$dblts, 
-                          labels = data$dblts.labels) + 
+            scale_x_log10("generation time", expand = c(0, 0.2), breaks = data$dblt, 
+                          labels = data$label) + 
             scale_fill_manual("Isotope spike", values = brewer.pal(3, "Set1")) +
             scale_color_manual("Isotope spike", values = brewer.pal(3, "Set1")) +
             labs(title = paste0("Required labeling times for enrichment to:\n", 
