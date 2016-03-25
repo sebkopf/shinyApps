@@ -1,5 +1,38 @@
+#' folder selector in modal dialog
+#' 
+#' @param dialog_close_id to trigger reactive action in response to the modal 
+#' dialog being closed, reference the \code{input$}
+#' 
+modalFolderSelectorInput <- function(id, 
+                                     dialog_open_label = "Select folder", 
+                                     dialog_close_label = "Select",
+                                     dialog_close_id = "select",
+                                     size = "large") {
+  ns <- NS(id)
+  modal_dlg <- 
+    do.call(bsModal, args = c(
+      list(id = ns("modal"), title = dialog_open_label, 
+           trigger = ns("button"), size = size), 
+      folderSelectorInput(id)))
+  
+  # modify modal dialog button
+  modal_dlg$children[[1]]$children[[1]]$children[[3]]$children[[1]]$children[[1]] <- 
+    dialog_close_label
+  modal_dlg$children[[1]]$children[[1]]$children[[3]]$children[[1]]$attribs$id <- 
+    ns(dialog_close_id)
+  modal_dlg$children[[1]]$children[[1]]$children[[3]]$children[[1]]$attribs$class <- 
+    "btn btn-default action-button"
+  
+  tagList(
+    actionButton(ns("button"), dialog_open_label),
+    modal_dlg
+  )
+}
+
+# regular folder selector (in frame, not in modal dialog)
 folderSelectorInput <- function(id) {
   ns <- NS(id)
+  dialog_tags <- 
   tagList(
     uiOutput(ns("path")),
     fluidRow(
@@ -22,7 +55,10 @@ folderSelectorInput <- function(id) {
         })", 
       ns("folder"), ns("folder"), ns("new_folder")))
   )
+  
+  return(dialog_tags)
 }
+
 
 folderSelector <- function(input, output, session, root, 
                            folders_label = "Select folder:",
