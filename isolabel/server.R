@@ -131,6 +131,7 @@ shinyServer(function(input, output, session) {
               Spike = factor(Label, levels = get_iso_labels()$Label),
               enrichment = get_value(if(input$plot2DataType == "permil") total.delta else total.ab)
             )
+          
           setProgress(value = 4)
           
           # table 1 data
