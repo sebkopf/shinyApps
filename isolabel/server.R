@@ -120,7 +120,7 @@ shinyServer(function(input, output, session) {
           times <- seq(0, max(data$plot1.df$labeling_time) * input$plot2Xzoom/100, length.out = 50)
           data$plot2.df <- 
             label_strength(
-              time = duration(c(1, times), "seconds"), 
+              time = c(1, times), 
               dblt = get_doubling_times()$dblt, 
               tracer = get_iso_labels()$effective.wab,
               natural = data$nat) %>% 
@@ -141,15 +141,15 @@ shinyServer(function(input, output, session) {
             lapply(function(i){
               df <- subset(data$plot1.df, tracer.ab == i)
               label_strength(
-                time = duration(df$labeling_time, "seconds"), 
-                dblt = duration(df$dblt, "seconds"), 
+                time = df$labeling_time, 
+                dblt = df$dblt, 
                 tracer = abundance(i) %>% set_attrib(minor = data$nat@isoname, major = data$nat@major),
                 natural = data$nat)
             }) %>% 
             dplyr::bind_rows() %>% 
             # merge in doubling times and iso labels
-            merge(get_doubling_times() %>% mutate(label = label %>% paste("doubling")), by = "dblt") %>% 
-            merge(get_iso_labels(), by.x = "tracer.ab", by.y = "effective.wab") %>% 
+            dplyr::left_join(get_doubling_times() %>% mutate(label = label %>% paste("doubling")), by = "dblt") %>% 
+            dplyr::left_join(get_iso_labels(), by.x = "tracer.ab", by.y = "effective.wab") %>% 
             mutate(
               `Incubation time [s]` = as.numeric(time), 
               `Incubation time` = time.label,
@@ -161,6 +161,8 @@ shinyServer(function(input, output, session) {
                 }) %>% 
             # cast into wide format
             dcast(`Label` + `Incubation time [s]` + `Incubation time` ~ label, value.var = "enrichment")
+          
+          print(data$table.df)
           
           # header order
           header_order <- match(paste(get_doubling_times()$label, "doubling"), names(data$table.df))

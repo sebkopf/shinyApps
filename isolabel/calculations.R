@@ -8,10 +8,14 @@ set_iso_opts(
 #' Duration labels to the closest large denominator (e.g. 86400s = ~24 hours)
 #'@param ds vector of lubridate:::duration objects or time in seconds
 duration_label <- function(ds) {
-  sub("~", "", sapply(ds, function(x) { 
-    if (grepl("^[0-9\\.]+s$", (d <- duration(x, "seconds")))) return(paste0('~', round(as.numeric(d), 1), " seconds"))
-    else return(str_extract(d, "~.[^\\)]*"))
-  }))
+  sapply(ds, function(x) { 
+    if (is.na(x)) return("")
+    estimate <- lubridate:::compute_estimate(round(as.numeric(x), 0))
+    if (str_detect(estimate, "^[0-9\\.]+s$"))
+        return(str_c(round(as.numeric(x), 0), " seconds"))
+    else 
+        return(str_match(estimate, "~(.[^\\)]*)") %>% {.[,2]})
+  })
 }
 
 #' Labeling time as function of doubling time, desired isotopic enrichment and strength of label

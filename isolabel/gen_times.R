@@ -1,12 +1,14 @@
 # doubling times
 get_doubling_times <- reactive({
-  data$gen_times %>% 
+  dblt <- data$gen_times %>% 
     dplyr::filter(include == "yes") %>% 
     dplyr::distinct() %>% 
     dplyr::group_by_(.dots = names(data$gen_times)) %>% 
     dplyr::mutate(
-      dblt = duration(as.integer(value), units), 
-      label = paste0(value, " ", units, if(value > 1) "s"))
+      dblt = as.numeric(duration(as.integer(value), units)), 
+      label = ifelse(value > 1, paste0(value, " ", units, "s"), paste0(value, " ", units))
+    )
+  return(dblt)
 })
 
 # hide/show gen times edit box
